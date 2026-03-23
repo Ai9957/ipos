@@ -5,103 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>線上快餐店 POS 系統</title>
   <link rel="stylesheet" href="index.css">
-  <!-- Firebase Compat UI -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-  <!-- React & Babel -->
   <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script>
     window.POSDatabase = (function() {
-      const firebaseConfig = {
-        apiKey: "AIzaSyDTsrdVcwm7mi2aGoexNG4QqcEyn6JFqpw", 
-        authDomain: "project-a60e1765-a61e-40db-82e.firebaseapp.com", 
-        projectId: "project-a60e1765-a61e-40db-82e",
-      };
-
-      let dbMode = 'local';
-      let dbInstance = null;
-
+      const firebaseConfig = { apiKey: "AIzaSyDTsrdVcwm7mi2aGoexNG4QqcEyn6JFqpw", authDomain: "project-a60e1765-a61e-40db-82e.firebaseapp.com", projectId: "project-a60e1765-a61e-40db-82e" };
+      let dbMode = 'local', dbInstance = null;
       if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
-        try {
-          if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-          }
-          dbInstance = firebase.firestore();
-          dbMode = 'firebase';
-        } catch(e) {
-          console.error("Firebase err", e);
-        }
+        try { if (!firebase.apps.length) firebase.initializeApp(firebaseConfig); dbInstance = firebase.firestore(); dbMode = 'firebase'; } catch(e) { console.error(e); }
       }
-
       const saveOrder = async (orderInfo) => {
-        const newOrder = {
-          ...orderInfo,
-          status: 'pending',
-          createdAt: new Date().toISOString()
-        };
-
-        if (dbMode === 'firebase') {
-          await dbInstance.collection('orders').add(newOrder);
-        } else {
-          newOrder.id = 'ORD-' + Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
-          const orders = JSON.parse(localStorage.getItem('pos_orders') || '[]');
-          orders.push(newOrder);
-          localStorage.setItem('pos_orders', JSON.stringify(orders));
-          window.dispatchEvent(new CustomEvent('local-db-update'));
-        }
+        const newOrder = { ...orderInfo, status: 'pending', createdAt: new Date().toISOString() };
+        if (dbMode === 'firebase') await dbInstance.collection('orders').add(newOrder);
       };
-
       const updateOrderStatus = async (orderId, status) => {
-        if (dbMode === 'firebase') {
-          await dbInstance.collection('orders').doc(orderId).update({ status });
-        } else {
-          const orders = JSON.parse(localStorage.getItem('pos_orders') || '[]');
-          const index = orders.findIndex(o => o.id === orderId);
-          if (index !== -1) {
-            orders[index].status = status;
-            localStorage.setItem('pos_orders', JSON.stringify(orders));
-            window.dispatchEvent(new CustomEvent('local-db-update'));
-          }
-        }
+        if (dbMode === 'firebase') await dbInstance.collection('orders').doc(orderId).update({ status });
       };
-
       const subscribeToOrders = (callback) => {
-        if (dbMode === 'firebase') {
-          return dbInstance.collection('orders')
-            .orderBy('createdAt', 'desc')
-            .onSnapshot((snapshot) => {
-              const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-              callback(orders);
-            });
-        } else {
-          const emitCallback = () => {
-            const orders = JSON.parse(localStorage.getItem('pos_orders') || '[]');
-            callback(orders.reverse());
-          };
-          window.addEventListener('storage', (e) => { if (e.key === 'pos_orders') emitCallback(); });
-          window.addEventListener('local-db-update', emitCallback);
-          emitCallback();
-          return () => {};
-        }
+        if (dbMode === 'firebase') return dbInstance.collection('orders').orderBy('createdAt', 'desc').onSnapshot((s) => callback(s.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
       };
-      return { saveOrder, updateOrderStatus, subscribeToOrders };
+      const getMenu = (callback) => {
+        if (dbMode === 'firebase') return dbInstance.collection('menu_items').onSnapshot((s) => callback(s.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+      };
+      const saveMenuItem = async (item) => {
+        const data = { ...item }; let id = data.id; delete data.id;
+        if (dbMode === 'firebase') { if(id) await dbInstance.collection('menu_items').doc(id).update(data); else await dbInstance.collection('menu_items').add(data); }
+      };
+      const deleteMenuItem = async (id) => { if (dbMode === 'firebase') await dbInstance.collection('menu_items').doc(id).delete(); };
+      const importDefaultMenu = async (defaultItems) => {
+        if (dbMode === 'firebase') { const batch = dbInstance.batch(); defaultItems.forEach(item => batch.set(dbInstance.collection('menu_items').doc(item.id.toString()), item)); await batch.commit(); }
+      };
+      return { saveOrder, updateOrderStatus, subscribeToOrders, getMenu, saveMenuItem, deleteMenuItem, importDefaultMenu };
     })();
   </script>
 </head>
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const menuData = [
-      { id: 1, name: '經典牛肉堡', price: 120, category: 'burger', image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=200&h=200' },
-      { id: 2, name: '雙層起司堡', price: 150, category: 'burger', image: 'https://images.unsplash.com/photo-1586816001966-79b736744398?auto=format&fit=crop&q=80&w=200&h=200' },
-      { id: 3, name: '脆皮炸雞', price: 60, category: 'snack', image: 'https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?auto=format&fit=crop&q=80&w=200&h=200' },
-      { id: 4, name: '黃金脆薯', price: 50, category: 'snack', image: 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&q=80&w=200&h=200' },
-      { id: 5, name: '可口可樂', price: 40, category: 'drink', image: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&q=80&w=200&h=200' },
-      { id: 6, name: '冰紅茶', price: 35, category: 'drink', image: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?auto=format&fit=crop&q=80&w=200&h=200' },
-      { id: 7, name: '經典套餐', price: 200, category: 'combo', image: 'https://images.unsplash.com/photo-1610614819515-6899ba89e5fc?auto=format&fit=crop&q=80&w=200&h=200' }
-    ];
+    const { useState, useEffect, useMemo } = React;
 
     const categories = [
       { id: 'all', name: '全部' },
@@ -111,25 +55,34 @@
       { id: 'combo', name: '套餐' }
     ];
 
-    const { useState, useMemo } = React;
-
     function App() {
+      const [menuItems, setMenuItems] = useState([]);
+      const [isMenuLoaded, setIsMenuLoaded] = useState(false);
+      
       const [activeCategory, setActiveCategory] = useState('all');
       const [cartItems, setCartItems] = useState([]);
       const [selectedProduct, setSelectedProduct] = useState(null);
       const [modifiers, setModifiers] = useState({ ice: '正常冰', sugar: '正常糖' });
 
+      useEffect(() => {
+        const unsubscribe = window.POSDatabase.getMenu((data) => {
+          setMenuItems(data || []);
+          setIsMenuLoaded(true);
+        });
+        return () => unsubscribe();
+      }, []);
+
       const filteredProducts = useMemo(() => {
-        if (activeCategory === 'all') return menuData;
-        return menuData.filter(item => item.category === activeCategory);
-      }, [activeCategory]);
+        if (activeCategory === 'all') return menuItems;
+        return menuItems.filter(item => item.category === activeCategory);
+      }, [activeCategory, menuItems]);
 
       const totalAmount = useMemo(() => {
         return cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       }, [cartItems]);
 
       const handleProductClick = (product) => {
-        if (product.category === 'drink') {
+        if (product.hasOptions) {
           setSelectedProduct(product);
           setModifiers({ ice: '正常冰', sugar: '正常糖' });
         } else {
@@ -189,7 +142,6 @@
         };
 
         try {
-          // 儲存訂單到 Firebase (或跨分頁本地儲存)
           await window.POSDatabase.saveOrder(orderData);
           alert(`結帳成功！訂單已即時同步至廚房 KDS。總金額為 $${totalAmount}`);
           setCartItems([]);
@@ -220,23 +172,36 @@
             <header className="header">
               <h1>{categories.find(c => c.id === activeCategory)?.name || '全部'}</h1>
             </header>
-            <div className="menu-grid">
-              {filteredProducts.map(product => (
-                <div 
-                  key={product.id} 
-                  className="menu-card"
-                  onClick={() => handleProductClick(product)}
-                >
-                  <div className="card-img-wrapper">
-                    <img src={product.image} className="card-img" alt={product.name} />
+            
+            {!isMenuLoaded ? (
+               <div style={{padding:'50px', textAlign:'center', color:'#888', fontSize:'20px'}}>菜單同步中...</div>
+            ) : menuItems.length === 0 ? (
+               <div style={{padding:'50px', textAlign:'center', color:'#ff4757', fontSize:'22px', fontWeight:'bold'}}>
+                 老闆還沒有上架任何餐點喔！🍔<br/>
+                 <span style={{fontSize:'16px', color:'#777', fontWeight:'normal'}}>請前往「菜單管理」點擊一鍵匯入或手動新增。</span>
+               </div>
+            ) : (
+              <div className="menu-grid">
+                {filteredProducts.map(product => (
+                  <div 
+                    key={product.id} 
+                    className="menu-card"
+                    onClick={() => handleProductClick(product)}
+                  >
+                    <div className="card-img-wrapper">
+                      <img src={product.image} className="card-img" alt={product.name} />
+                    </div>
+                    <div className="card-info">
+                      <div className="card-title">
+                        {product.name} 
+                        {product.hasOptions && <span style={{fontSize:'12px', background:'#ffeaa7', padding:'2px 4px', borderRadius:'4px', color:'#d35400', verticalAlign:'middle', marginLeft:'5px'}}>客製</span>}
+                      </div>
+                      <div className="card-price">${product.price}</div>
+                    </div>
                   </div>
-                  <div className="card-info">
-                    <div className="card-title">{product.name}</div>
-                    <div className="card-price">${product.price}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </main>
 
           <aside className="cart-sidebar">
