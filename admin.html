@@ -95,6 +95,7 @@
       const [editingItem, setEditingItem] = useState(null);
       const [categoryOrder, setCategoryOrder] = useState([]);
       const [locallySortedCategories, setLocallySortedCategories] = useState([]);
+      const [filterCategory, setFilterCategory] = useState('all');
 
       useEffect(() => {
         const unsub = window.POSDatabase.getCategoryOrder(setCategoryOrder);
@@ -196,10 +197,32 @@
             )}
             {activeTab === 'menu' && (
               <div>
-                <div style={{display:'flex', justifyContent:'space-between', borderBottom:'2px solid #eee', paddingBottom:'15px', marginBottom:'20px'}}>
+                <div style={{display:'flex', justifyContent:'space-between', borderBottom:'2px solid #eee', paddingBottom:'15px', marginBottom:'20px', alignItems:'center'}}>
                    <h2 style={{border:'none', margin:0}}>菜單管理系統</h2>
-                   <button onClick={() => setEditingItem({name:'', price:0, category:'', image:'', hasOptions:false, customOptions:''})} style={{padding:'10px 20px', background:'var(--primary-color)', color:'#fff', border:'none', borderRadius:'8px', cursor:'pointer', fontWeight:'bold'}}>＋ 新增餐點</button>
+                   <button onClick={() => setEditingItem({name:'', price:0, category:'', image:'', hasOptions:false, customOptions:''})} style={{padding: '10px 20px', background: 'var(--primary-color)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold'}}>＋ 新增餐點</button>
                 </div>
+                
+                <div style={{display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', background: '#fff', padding: '15px', borderRadius: '12px'}}>
+                  <button 
+                    onClick={() => setFilterCategory('all')} 
+                    style={{padding: '8px 16px', borderRadius: '20px', border: '1px solid #ddd', background: filterCategory === 'all' ? 'var(--primary-color)' : '#f8f9fa', color: filterCategory === 'all' ? '#fff' : '#555', cursor: 'pointer', fontWeight: 'bold'}}
+                  >
+                    全部 ({menuItems.length})
+                  </button>
+                  {locallySortedCategories.map(cat => {
+                    const count = menuItems.filter(item => (categoryLabelMap[item.category] || item.category) === cat).length;
+                    return (
+                      <button 
+                        key={cat}
+                        onClick={() => setFilterCategory(cat)} 
+                        style={{padding: '8px 16px', borderRadius: '20px', border: '1px solid #ddd', background: filterCategory === cat ? 'var(--primary-color)' : '#f8f9fa', color: filterCategory === cat ? '#fff' : '#555', cursor: 'pointer', fontWeight: 'bold'}}
+                      >
+                        {cat} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+
                 {menuItems.length === 0 && !editingItem && (
                    <div style={{padding:'50px', textAlign:'center', background:'#fff', borderRadius:'12px'}}>
                      <h3 style={{color:'#777'}}>目前資料庫中沒有任何餐點</h3>
@@ -257,7 +280,9 @@
                    </div>
                 ) : (
                    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(350px, 1fr))', gap:'20px'}}>
-                     {menuItems.map(item => (
+                     {menuItems
+                       .filter(item => filterCategory === 'all' || (categoryLabelMap[item.category] || item.category) === filterCategory)
+                       .map(item => (
                         <div key={item.id} style={{background:'#fff', borderRadius:'12px', padding:'15px', display:'flex', gap:'15px', alignItems:'center'}}>
                            <img src={item.image} style={{width:'80px', height:'80px', objectFit:'cover', borderRadius:'8px'}} />
                            <div style={{flex:1}}>
