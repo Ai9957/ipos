@@ -47,18 +47,17 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
 
-    const categories = [
-      { id: 'all', name: '全部' },
-      { id: 'burger', name: '漢堡' },
-      { id: 'snack', name: '點心' },
-      { id: 'drink', name: '飲料' },
-      { id: 'combo', name: '套餐' }
-    ];
+    const categoryLabelMap = { burger: '漢堡', snack: '點心', drink: '飲料', combo: '套餐' };
 
     function App() {
       const [menuItems, setMenuItems] = useState([]);
       const [isMenuLoaded, setIsMenuLoaded] = useState(false);
       
+      const computedCategories = useMemo(() => {
+        const cats = new Set(menuItems.map(item => categoryLabelMap[item.category] || item.category).filter(Boolean));
+        return [{ id: 'all', name: '全部' }, ...Array.from(cats).map(c => ({ id: c, name: c }))];
+      }, [menuItems]);
+
       const [activeCategory, setActiveCategory] = useState('all');
       const [cartItems, setCartItems] = useState([]);
       const [selectedProduct, setSelectedProduct] = useState(null);
@@ -84,7 +83,7 @@
 
       const filteredProducts = useMemo(() => {
         if (activeCategory === 'all') return menuItems;
-        return menuItems.filter(item => item.category === activeCategory);
+        return menuItems.filter(item => (categoryLabelMap[item.category] || item.category) === activeCategory);
       }, [activeCategory, menuItems]);
 
       const totalAmount = useMemo(() => {
@@ -165,7 +164,7 @@
         <div className="pos-layout">
           <nav className="side-nav">
             <div className="logo">POS</div>
-            {categories.map(cat => (
+            {computedCategories.map(cat => (
               <div 
                 key={cat.id} 
                 className={`nav-item ${activeCategory === cat.id ? 'active' : ''}`}
@@ -181,7 +180,7 @@
 
           <main className="main-content">
             <header className="header">
-              <h1>{categories.find(c => c.id === activeCategory)?.name || '全部'}</h1>
+              <h1>{computedCategories.find(c => c.id === activeCategory)?.name || '全部'}</h1>
             </header>
             
             {!isMenuLoaded ? (

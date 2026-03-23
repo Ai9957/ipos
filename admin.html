@@ -80,7 +80,10 @@
     ];
 
     function AdminApp() {
-      const [activeTab, setActiveTab] = useState('menu');
+      const { useState, useEffect, useMemo } = React;
+      const categoryLabelMap = { burger: '漢堡', snack: '點心', drink: '飲料', combo: '套餐' };
+      
+      const [activeTab, setActiveTab] = useState('kds');
       const [orders, setOrders] = useState([]);
       const [menuItems, setMenuItems] = useState([]);
       const [editingItem, setEditingItem] = useState(null);
@@ -168,10 +171,25 @@
                            <input className="input-field" value={editingItem.name} onChange={e=>setEditingItem({...editingItem, name: e.target.value})} />
                         </div>
                         <div style={{marginBottom:'15px'}}>
-                           <label className="input-label">餐點分類</label>
-                           <select className="input-field" value={editingItem.category} onChange={e=>setEditingItem({...editingItem, category: e.target.value})}>
-                              <option value="burger">漢堡</option><option value="snack">點心</option><option value="drink">飲料</option><option value="combo">套餐</option>
-                           </select>
+                           <label className="input-label" style={{display:'flex', justifyContent:'space-between'}}>
+                             <span>餐點分類 (可選單或自創新分類)</span>
+                           </label>
+                           <input 
+                             className="input-field" 
+                             list="category-options" 
+                             placeholder="例如：漢堡、飲料、或自行輸入新分類如：熱炒" 
+                             value={editingItem.category} 
+                             onChange={e=>setEditingItem({...editingItem, category: e.target.value})} 
+                           />
+                           <datalist id="category-options">
+                              <option value="漢堡" />
+                              <option value="點心" />
+                              <option value="飲料" />
+                              <option value="套餐" />
+                              {Array.from(new Set(menuItems.map(i => categoryLabelMap[i.category] || i.category))).map(cat => (
+                                 !['漢堡','點心','飲料','套餐','burger','snack','drink','combo'].includes(cat) && <option key={cat} value={cat} />
+                              ))}
+                           </datalist>
                         </div>
                         <div style={{marginBottom:'15px'}}>
                            <label className="input-label">販售價格</label>
@@ -201,7 +219,7 @@
                            <div style={{flex:1}}>
                               <div style={{fontWeight:'bold', fontSize:'20px'}}>{item.name}</div>
                               <div style={{color:'var(--primary-color)', fontWeight:'bold'}}>${item.price}</div>
-                              <div style={{color:'#777', fontSize:'14px'}}>{item.category} {(item.hasOptions || item.customOptions) && <span style={{color:'var(--primary-color)'}}>✨客製化</span>}</div>
+                              <div style={{color:'#777', fontSize:'14px'}}>{categoryLabelMap[item.category] || item.category} {(item.hasOptions || item.customOptions) && <span style={{color:'var(--primary-color)'}}>✨客製化</span>}</div>
                            </div>
                            <div style={{display:'flex', flexDirection:'column', gap:'8px'}}>
                               <button onClick={()=>setEditingItem(item)} style={{padding:'8px 15px', background:'#f1f2f6', border:'none', borderRadius:'6px', cursor:'pointer'}}>編輯</button>
