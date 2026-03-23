@@ -22,7 +22,9 @@
         if (dbMode === 'firebase') await dbInstance.collection('orders').add(newOrder);
       };
       const updateOrderStatus = async (orderId, status) => {
-        if (dbMode === 'firebase') await dbInstance.collection('orders').doc(orderId).update({ status });
+        const updateData = { status };
+        if (status === 'completed') updateData.completedAt = new Date().toISOString();
+        if (dbMode === 'firebase') await dbInstance.collection('orders').doc(orderId).update(updateData);
       };
       const subscribeToOrders = (callback) => {
         if (dbMode === 'firebase') return dbInstance.collection('orders').orderBy('createdAt', 'desc').onSnapshot((s) => callback(s.docs.map(doc => ({ ...doc.data(), id: doc.id }))));
