@@ -36,6 +36,12 @@
       const saveCategoryOrder = async (orderArr) => {
         if (dbMode === 'firebase') await dbInstance.collection('settings').doc('category_order').set({ order: orderArr });
       };
+      const getItemOrders = (callback) => {
+        if (dbMode === 'firebase') return dbInstance.collection('settings').doc('item_orders').onSnapshot((s) => callback(s.exists ? s.data() : {}));
+      };
+      const saveItemOrders = async (ordersObj) => {
+        if (dbMode === 'firebase') await dbInstance.collection('settings').doc('item_orders').set(ordersObj);
+      };
       const saveMenuItem = async (item) => {
         const data = { ...item }; let id = data.id; delete data.id;
         if (dbMode === 'firebase') { if(id) await dbInstance.collection('menu_items').doc(String(id)).update(data); else await dbInstance.collection('menu_items').add(data); }
@@ -44,7 +50,7 @@
       const importDefaultMenu = async (defaultItems) => {
         if (dbMode === 'firebase') { const batch = dbInstance.batch(); defaultItems.forEach(item => batch.set(dbInstance.collection('menu_items').doc(item.id.toString()), item)); await batch.commit(); }
       };
-      return { saveOrder, updateOrderStatus, subscribeToOrders, getMenu, getCategoryOrder, saveCategoryOrder, saveMenuItem, deleteMenuItem, importDefaultMenu };
+      return { saveOrder, updateOrderStatus, subscribeToOrders, getMenu, getCategoryOrder, saveCategoryOrder, getItemOrders, saveItemOrders, saveMenuItem, deleteMenuItem, importDefaultMenu };
     })();
   </script>
 </head>
@@ -59,10 +65,12 @@
       const [menuItems, setMenuItems] = useState([]);
       const [isMenuLoaded, setIsMenuLoaded] = useState(false);
       const [categoryOrder, setCategoryOrder] = useState([]);
+      const [itemOrders, setItemOrders] = useState({});
       
       useEffect(() => {
-        const unsub = window.POSDatabase.getCategoryOrder?.(setCategoryOrder);
-        return () => unsub && unsub();
+        const unsubCat = window.POSDatabase.getCategoryOrder?.(setCategoryOrder);
+        const unsubItem = window.POSDatabase.getItemOrders?.(setItemOrders);
+        return () => { unsubCat && unsubCat(); unsubItem && unsubItem(); };
       }, []);
 
       const computedCategories = useMemo(() => {
@@ -101,9 +109,20 @@
       }, []);
 
       const filteredProducts = useMemo(() => {
-        if (activeCategory === 'all') return menuItems;
-        return menuItems.filter(item => (categoryLabelMap[item.category] || item.category) === activeCategory);
-      }, [activeCategory, menuItems]);
+        let baseItems = activeCategory === 'all' ? menuItems : menuItems.filter(item => (categoryLabelMap[item.category] || item.category) === activeCategory);
+        
+        // Apply sorting within category if activeCategory is not 'all'
+        // Actually, if 'all', sorting is mixed, but let's at least sort within each group if possible or just rely on category order
+        if(activeCategory !== 'all') {
+           const order = itemOrders[activeCategory] || [];
+           return [...baseItems].sort((a,b) => {
+              let ia = order.indexOf(a.id), ib = order.indexOf(b.id);
+              if(ia===-1) ia=999; if(ib===-1) ib=999;
+              return ia - ib;
+           });
+        }
+        return baseItems;
+      }, [activeCategory, menuItems, itemOrders]);
 
       const totalAmount = useMemo(() => {
         return cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);

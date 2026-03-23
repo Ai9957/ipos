@@ -36,6 +36,12 @@
       const saveCategoryOrder = async (orderArr) => {
         if (dbMode === 'firebase') await dbInstance.collection('settings').doc('category_order').set({ order: orderArr });
       };
+      const getItemOrders = (callback) => {
+        if (dbMode === 'firebase') return dbInstance.collection('settings').doc('item_orders').onSnapshot((s) => callback(s.exists ? s.data() : {}));
+      };
+      const saveItemOrders = async (ordersObj) => {
+        if (dbMode === 'firebase') await dbInstance.collection('settings').doc('item_orders').set(ordersObj);
+      };
       const saveMenuItem = async (item) => {
         const data = { ...item }; let id = data.id; delete data.id;
         if (dbMode === 'firebase') { if(id) await dbInstance.collection('menu_items').doc(String(id)).update(data); else await dbInstance.collection('menu_items').add(data); }
@@ -44,7 +50,7 @@
       const importDefaultMenu = async (defaultItems) => {
         if (dbMode === 'firebase') { const batch = dbInstance.batch(); defaultItems.forEach(item => batch.set(dbInstance.collection('menu_items').doc(item.id.toString()), item)); await batch.commit(); }
       };
-      return { saveOrder, updateOrderStatus, subscribeToOrders, getMenu, getCategoryOrder, saveCategoryOrder, saveMenuItem, deleteMenuItem, importDefaultMenu };
+      return { saveOrder, updateOrderStatus, subscribeToOrders, getMenu, getCategoryOrder, saveCategoryOrder, getItemOrders, saveItemOrders, saveMenuItem, deleteMenuItem, importDefaultMenu };
     })();
   </script>
   <style>
@@ -74,7 +80,7 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useMemo } = React;
     const defaultMenuData = [
       { id: 1, name: '經典牛肉堡', price: 120, category: 'burger', image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=200&h=200', hasOptions: false },
       { id: 2, name: '雙層起司堡', price: 150, category: 'burger', image: 'https://images.unsplash.com/photo-1586816001966-79b736744398?auto=format&fit=crop&q=80&w=200&h=200', hasOptions: false },
@@ -86,7 +92,6 @@
     ];
 
     function AdminApp() {
-      const { useState, useEffect, useMemo } = React;
       const categoryLabelMap = { burger: '漢堡', snack: '點心', drink: '飲料', combo: '套餐' };
       
       const [activeTab, setActiveTab] = useState('kds');
@@ -96,10 +101,13 @@
       const [categoryOrder, setCategoryOrder] = useState([]);
       const [locallySortedCategories, setLocallySortedCategories] = useState([]);
       const [filterCategory, setFilterCategory] = useState('all');
+      const [itemOrders, setItemOrders] = useState({});
+      const [selectedSortCategory, setSelectedSortCategory] = useState('');
 
       useEffect(() => {
         const unsub = window.POSDatabase.getCategoryOrder(setCategoryOrder);
-        return () => unsub && unsub();
+        const unsubItemOrders = window.POSDatabase.getItemOrders(setItemOrders);
+        return () => { unsub && unsub(); unsubItemOrders && unsubItemOrders(); };
       }, []);
 
       const computedCategories = useMemo(() => {
@@ -107,12 +115,13 @@
       }, [menuItems]);
 
       useEffect(() => {
-         const sorted = [...computedCategories].sort((a,b) => {
-            let ia = categoryOrder.indexOf(a), ib = categoryOrder.indexOf(b);
-            if(ia===-1) ia=999; if(ib===-1) ib=999;
-            return ia - ib;
-         });
-         setLocallySortedCategories(sorted);
+          const sorted = [...computedCategories].sort((a,b) => {
+             let ia = categoryOrder.indexOf(a), ib = categoryOrder.indexOf(b);
+             if(ia===-1) ia=999; if(ib===-1) ib=999;
+             return ia - ib;
+          });
+          setLocallySortedCategories(sorted);
+          if(!selectedSortCategory && sorted.length > 0) setSelectedSortCategory(sorted[0]);
       }, [computedCategories, categoryOrder]);
 
       const moveCategory = (index, direction) => {
@@ -126,10 +135,20 @@
       const handleSaveCategoryOrder = async () => {
          try {
            await window.POSDatabase.saveCategoryOrder(locallySortedCategories);
-           alert('排序儲存成功！');
+           alert('分類排序儲存成功！');
          } catch(e) {
            alert('儲存失敗：' + e.message);
          }
+      };
+
+      const handleSaveItemOrder = async (catName, sortedIds) => {
+          try {
+            const newOrders = { ...itemOrders, [catName]: sortedIds };
+            await window.POSDatabase.saveItemOrders(newOrders);
+            alert(`「${catName}」商品排序儲存成功！`);
+          } catch(e) {
+            alert('儲存失敗：' + e.message);
+          }
       };
 
       useEffect(() => {
@@ -163,7 +182,7 @@
             <div style={{ color: '#2f3640', fontSize: '20px', fontWeight:'bold', marginBottom:'30px' }}>管理後台 & KDS</div>
             <div className={`nav-item ${activeTab === 'kds' ? 'active' : ''}`} onClick={() => setActiveTab('kds')}>廚房看板 ({pendingOrders.length})</div>
             <div className={`nav-item ${activeTab === 'menu' ? 'active' : ''}`} onClick={() => setActiveTab('menu')}>菜單管理</div>
-            <div className={`nav-item ${activeTab === 'categories' ? 'active' : ''}`} onClick={() => setActiveTab('categories')}>分類排序</div>
+            <div className={`nav-item ${activeTab === 'categories' ? 'active' : ''}`} onClick={() => setActiveTab('categories')}>排序管理</div>
             <div className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>今日營業額</div>
             <div className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>出餐紀錄</div>
             <div style={{ marginTop: 'auto' }}>
@@ -301,27 +320,90 @@
               </div>
             )}
              {activeTab === 'categories' && (
-               <div>
-                 <h2 style={{borderBottom:'2px solid #eee', paddingBottom:'15px', marginBottom:'20px'}}>分類排序管理</h2>
-                 <div style={{maxWidth:'600px', background:'#fff', padding:'30px', borderRadius:'12px'}}>
-                   <p style={{color:'#777', marginBottom:'20px'}}>請使用上下按鈕調整前台左側選單的顯示順序，未排序的新分類將自動附在最後面。</p>
-                   {locallySortedCategories.length === 0 ? <div style={{color:'#777'}}>目前沒有任何分類。</div> : (
-                     <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
-                       {locallySortedCategories.map((cat, idx) => (
-                          <div key={cat} style={{display:'flex', justifyContent:'space-between', padding:'15px', background:'#f8f9fa', borderRadius:'8px', alignItems:'center'}}>
-                             <span style={{fontWeight:'bold', fontSize:'18px'}}>{cat}</span>
-                             <div style={{display:'flex', gap:'10px'}}>
-                                <button disabled={idx===0} onClick={()=>moveCategory(idx, -1)} style={{padding:'8px 15px', cursor: idx===0 ? 'not-allowed' : 'pointer', border:'1px solid #ccc', borderRadius:'6px', background: idx===0 ? '#eee' : '#fff'}}>↑ 往上</button>
-                                <button disabled={idx===locallySortedCategories.length-1} onClick={()=>moveCategory(idx, 1)} style={{padding:'8px 15px', cursor: idx===locallySortedCategories.length-1 ? 'not-allowed' : 'pointer', border:'1px solid #ccc', borderRadius:'6px', background: idx===locallySortedCategories.length-1 ? '#eee' : '#fff'}}>↓ 往下</button>
-                             </div>
+               <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'30px'}}>
+                 <div>
+                   <h2 style={{borderBottom:'2px solid #eee', paddingBottom:'15px', marginBottom:'20px'}}>1. 分類排序管理</h2>
+                   <div style={{background:'#fff', padding:'30px', borderRadius:'12px'}}>
+                     <p style={{color:'#777', marginBottom:'20px'}}>調整前台左側選單的顯示順序。</p>
+                     {locallySortedCategories.length === 0 ? <div style={{color:'#777'}}>目前沒有任何分類。</div> : (
+                       <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                         {locallySortedCategories.map((cat, idx) => (
+                            <div key={cat} style={{display:'flex', justifyContent:'space-between', padding:'15px', background:'#f8f9fa', borderRadius:'8px', alignItems:'center'}}>
+                               <span style={{fontWeight:'bold', fontSize:'18px'}}>{cat}</span>
+                               <div style={{display:'flex', gap:'10px'}}>
+                                  <button disabled={idx===0} onClick={()=>moveCategory(idx, -1)} style={{padding:'8px 15px', cursor: idx===0 ? 'not-allowed' : 'pointer', border:'1px solid #ccc', borderRadius:'6px', background: idx===0 ? '#eee' : '#fff'}}>↑</button>
+                                  <button disabled={idx===locallySortedCategories.length-1} onClick={()=>moveCategory(idx, 1)} style={{padding:'8px 15px', cursor: idx===locallySortedCategories.length-1 ? 'not-allowed' : 'pointer', border:'1px solid #ccc', borderRadius:'6px', background: idx===locallySortedCategories.length-1 ? '#eee' : '#fff'}}>↓</button>
+                               </div>
+                            </div>
+                         ))}
+                         <button onClick={handleSaveCategoryOrder} style={{marginTop:'20px', width:'100%', padding:'15px', background:'var(--primary-color)', color:'#fff', border:'none', borderRadius:'8px', fontSize:'18px', fontWeight:'bold', cursor:'pointer'}}>儲存分類排序</button>
+                       </div>
+                     )}
+                   </div>
+                 </div>
+
+                 <div>
+                    <h2 style={{borderBottom:'2px solid #eee', paddingBottom:'15px', marginBottom:'20px'}}>2. 餐點先後排序</h2>
+                    <div style={{background:'#fff', padding:'30px', borderRadius:'12px'}}>
+                       <div style={{marginBottom:'20px'}}>
+                          <label className="input-label">選擇欲排序的分類：</label>
+                          <select className="input-field" value={selectedSortCategory} onChange={e=>setSelectedSortCategory(e.target.value)}>
+                             {locallySortedCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                          </select>
+                       </div>
+
+                       {selectedSortCategory && (
+                          <div>
+                             {(() => {
+                                const catItems = menuItems.filter(item => (categoryLabelMap[item.category] || item.category) === selectedSortCategory);
+                                const order = itemOrders[selectedSortCategory] || [];
+                                const sortedCatItems = [...catItems].sort((a,b) => {
+                                   let ia = order.indexOf(a.id), ib = order.indexOf(b.id);
+                                   if(ia===-1) ia=999; if(ib===-1) ib=999;
+                                   return ia - ib;
+                                });
+
+                                if(sortedCatItems.length === 0) return <div style={{color:'#999'}}>此分類下目前沒有餐點。</div>;
+
+                                return (
+                                   <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                                      {sortedCatItems.map((item, idx) => (
+                                         <div key={item.id} style={{display:'flex', justifyContent:'space-between', padding:'12px', background:'#f1f2f6', borderRadius:'8px', alignItems:'center'}}>
+                                            <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                                               <img src={item.image} style={{width:'40px', height:'40px', borderRadius:'4px', objectFit:'cover'}} />
+                                               <span style={{fontWeight:'bold'}}>{item.name}</span>
+                                            </div>
+                                            <div style={{display:'flex', gap:'5px'}}>
+                                               <button 
+                                                  disabled={idx===0} 
+                                                  onClick={() => {
+                                                     const newItems = [...sortedCatItems];
+                                                     [newItems[idx], newItems[idx-1]] = [newItems[idx-1], newItems[idx]];
+                                                     handleSaveItemOrder(selectedSortCategory, newItems.map(i => i.id));
+                                                  }}
+                                                  style={{padding:'5px 10px', cursor:'pointer'}}
+                                               >↑</button>
+                                               <button 
+                                                  disabled={idx===sortedCatItems.length-1} 
+                                                  onClick={() => {
+                                                     const newItems = [...sortedCatItems];
+                                                     [newItems[idx], newItems[idx+1]] = [newItems[idx+1], newItems[idx]];
+                                                     handleSaveItemOrder(selectedSortCategory, newItems.map(i => i.id));
+                                                  }}
+                                                  style={{padding:'5px 10px', cursor:'pointer'}}
+                                               >↓</button>
+                                            </div>
+                                         </div>
+                                      ))}
+                                   </div>
+                                );
+                             })()}
                           </div>
-                       ))}
-                       <button onClick={handleSaveCategoryOrder} style={{marginTop:'20px', width:'100%', padding:'15px', background:'var(--primary-color)', color:'#fff', border:'none', borderRadius:'8px', fontSize:'18px', fontWeight:'bold', cursor:'pointer'}}>儲存排序結果</button>
-                     </div>
-                   )}
+                       )}
+                    </div>
                  </div>
                </div>
-            )}
+             )}
             {activeTab === 'dashboard' && (
               <div>
                 <h2>今日營業概況</h2>
