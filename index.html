@@ -25,14 +25,14 @@
         if (dbMode === 'firebase') await dbInstance.collection('orders').doc(orderId).update({ status });
       };
       const subscribeToOrders = (callback) => {
-        if (dbMode === 'firebase') return dbInstance.collection('orders').orderBy('createdAt', 'desc').onSnapshot((s) => callback(s.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+        if (dbMode === 'firebase') return dbInstance.collection('orders').orderBy('createdAt', 'desc').onSnapshot((s) => callback(s.docs.map(doc => ({ ...doc.data(), id: doc.id }))));
       };
       const getMenu = (callback) => {
-        if (dbMode === 'firebase') return dbInstance.collection('menu_items').onSnapshot((s) => callback(s.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+        if (dbMode === 'firebase') return dbInstance.collection('menu_items').onSnapshot((s) => callback(s.docs.map(doc => ({ ...doc.data(), id: doc.id }))));
       };
       const saveMenuItem = async (item) => {
         const data = { ...item }; let id = data.id; delete data.id;
-        if (dbMode === 'firebase') { if(id) await dbInstance.collection('menu_items').doc(id).update(data); else await dbInstance.collection('menu_items').add(data); }
+        if (dbMode === 'firebase') { if(id) await dbInstance.collection('menu_items').doc(String(id)).update(data); else await dbInstance.collection('menu_items').add(data); }
       };
       const deleteMenuItem = async (id) => { if (dbMode === 'firebase') await dbInstance.collection('menu_items').doc(id).delete(); };
       const importDefaultMenu = async (defaultItems) => {
