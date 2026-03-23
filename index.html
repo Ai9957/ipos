@@ -79,6 +79,7 @@
       const [cartItems, setCartItems] = useState([]);
       const [selectedProduct, setSelectedProduct] = useState(null);
       const [selectedModifiers, setSelectedModifiers] = useState([]);
+      const [showCheckoutModal, setShowCheckoutModal] = useState(false);
 
       const getOptionsList = (product) => {
         if (product.customOptions) {
@@ -154,9 +155,12 @@
         setCartItems(prev => prev.filter(item => item.cartItemId !== cartItemId));
       };
 
-      const checkout = async () => {
+      const checkout = () => {
         if (cartItems.length === 0) return;
+        setShowCheckoutModal(true);
+      };
 
+      const handleConfirmCheckout = async () => {
         const orderData = {
           totalAmount,
           items: cartItems.map(item => ({
@@ -170,8 +174,9 @@
 
         try {
           await window.POSDatabase.saveOrder(orderData);
-          alert(`結帳成功！訂單已即時同步至廚房 KDS。總金額為 $${totalAmount}`);
+          alert(`訂單已成功送出！`);
           setCartItems([]);
+          setShowCheckoutModal(false);
         } catch (error) {
           alert('結帳失敗：' + error.message);
         }
@@ -301,6 +306,46 @@
                     onClick={() => addToCart(selectedProduct, selectedModifiers)}
                   >
                     加入訂單
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showCheckoutModal && (
+            <div className="modal-overlay" onClick={() => setShowCheckoutModal(false)}>
+              <div className="modal-box" style={{ width: '500px' }} onClick={e => e.stopPropagation()}>
+                <div className="modal-header" style={{ borderBottom: '2px solid #eee', paddingBottom: '15px' }}>
+                  確認訂單資訊
+                </div>
+                
+                <div style={{ maxHeight: '300px', overflowY: 'auto', padding: '15px 0' }}>
+                  {cartItems.map(item => (
+                    <div key={item.cartItemId} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '18px' }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontWeight: 'bold', color: 'var(--primary-color)', marginRight: '10px' }}>{item.quantity}x</span>
+                        {item.title}
+                      </div>
+                      <div style={{ fontWeight: 'bold' }}>${item.price * item.quantity}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ borderTop: '2px solid #eee', paddingTop: '15px', marginTop: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22px', fontWeight: 'bold' }}>
+                    <span>應付總額</span>
+                    <span style={{ color: 'var(--primary-color)' }}>${totalAmount}</span>
+                  </div>
+                </div>
+
+                <div className="modal-actions" style={{ marginTop: '30px' }}>
+                  <button className="btn btn-cancel" onClick={() => setShowCheckoutModal(false)}>再檢查一下</button>
+                  <button 
+                    className="btn btn-confirm" 
+                    onClick={handleConfirmCheckout}
+                    style={{ background: '#4cd137', color: '#fff' }}
+                  >
+                    確認送出訂單
                   </button>
                 </div>
               </div>
