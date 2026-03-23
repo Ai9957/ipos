@@ -30,6 +30,12 @@
       const getMenu = (callback) => {
         if (dbMode === 'firebase') return dbInstance.collection('menu_items').onSnapshot((s) => callback(s.docs.map(doc => ({ ...doc.data(), id: doc.id }))));
       };
+      const getCategoryOrder = (callback) => {
+        if (dbMode === 'firebase') return dbInstance.collection('settings').doc('category_order').onSnapshot((s) => callback(s.exists ? (s.data().order || []) : []));
+      };
+      const saveCategoryOrder = async (orderArr) => {
+        if (dbMode === 'firebase') await dbInstance.collection('settings').doc('category_order').set({ order: orderArr });
+      };
       const saveMenuItem = async (item) => {
         const data = { ...item }; let id = data.id; delete data.id;
         if (dbMode === 'firebase') { if(id) await dbInstance.collection('menu_items').doc(String(id)).update(data); else await dbInstance.collection('menu_items').add(data); }
@@ -38,7 +44,7 @@
       const importDefaultMenu = async (defaultItems) => {
         if (dbMode === 'firebase') { const batch = dbInstance.batch(); defaultItems.forEach(item => batch.set(dbInstance.collection('menu_items').doc(item.id.toString()), item)); await batch.commit(); }
       };
-      return { saveOrder, updateOrderStatus, subscribeToOrders, getMenu, saveMenuItem, deleteMenuItem, importDefaultMenu };
+      return { saveOrder, updateOrderStatus, subscribeToOrders, getMenu, getCategoryOrder, saveCategoryOrder, saveMenuItem, deleteMenuItem, importDefaultMenu };
     })();
   </script>
   <style>
@@ -87,6 +93,43 @@
       const [orders, setOrders] = useState([]);
       const [menuItems, setMenuItems] = useState([]);
       const [editingItem, setEditingItem] = useState(null);
+      const [categoryOrder, setCategoryOrder] = useState([]);
+      const [locallySortedCategories, setLocallySortedCategories] = useState([]);
+
+      useEffect(() => {
+        const unsub = window.POSDatabase.getCategoryOrder(setCategoryOrder);
+        return () => unsub && unsub();
+      }, []);
+
+      const computedCategories = useMemo(() => {
+        return Array.from(new Set(menuItems.map(item => categoryLabelMap[item.category] || item.category).filter(Boolean)));
+      }, [menuItems]);
+
+      useEffect(() => {
+         const sorted = [...computedCategories].sort((a,b) => {
+            let ia = categoryOrder.indexOf(a), ib = categoryOrder.indexOf(b);
+            if(ia===-1) ia=999; if(ib===-1) ib=999;
+            return ia - ib;
+         });
+         setLocallySortedCategories(sorted);
+      }, [computedCategories, categoryOrder]);
+
+      const moveCategory = (index, direction) => {
+         const newList = [...locallySortedCategories];
+         const temp = newList[index];
+         newList[index] = newList[index + direction];
+         newList[index + direction] = temp;
+         setLocallySortedCategories(newList);
+      };
+
+      const handleSaveCategoryOrder = async () => {
+         try {
+           await window.POSDatabase.saveCategoryOrder(locallySortedCategories);
+           alert('排序儲存成功！');
+         } catch(e) {
+           alert('儲存失敗：' + e.message);
+         }
+      };
 
       useEffect(() => {
         const unsubOrders = window.POSDatabase.subscribeToOrders((data) => setOrders(data || []));
@@ -119,6 +162,7 @@
             <div style={{ color: '#2f3640', fontSize: '20px', fontWeight:'bold', marginBottom:'30px' }}>管理後台 & KDS</div>
             <div className={`nav-item ${activeTab === 'kds' ? 'active' : ''}`} onClick={() => setActiveTab('kds')}>廚房看板 ({pendingOrders.length})</div>
             <div className={`nav-item ${activeTab === 'menu' ? 'active' : ''}`} onClick={() => setActiveTab('menu')}>菜單管理</div>
+            <div className={`nav-item ${activeTab === 'categories' ? 'active' : ''}`} onClick={() => setActiveTab('categories')}>分類排序</div>
             <div className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>今日營業額</div>
             <div className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>出餐紀錄</div>
             <div style={{ marginTop: 'auto' }}>
@@ -230,6 +274,28 @@
                    </div>
                 )}
               </div>
+            )}
+             {activeTab === 'categories' && (
+               <div>
+                 <h2 style={{borderBottom:'2px solid #eee', paddingBottom:'15px', marginBottom:'20px'}}>分類排序管理</h2>
+                 <div style={{maxWidth:'600px', background:'#fff', padding:'30px', borderRadius:'12px'}}>
+                   <p style={{color:'#777', marginBottom:'20px'}}>請使用上下按鈕調整前台左側選單的顯示順序，未排序的新分類將自動附在最後面。</p>
+                   {locallySortedCategories.length === 0 ? <div style={{color:'#777'}}>目前沒有任何分類。</div> : (
+                     <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                       {locallySortedCategories.map((cat, idx) => (
+                          <div key={cat} style={{display:'flex', justifyContent:'space-between', padding:'15px', background:'#f8f9fa', borderRadius:'8px', alignItems:'center'}}>
+                             <span style={{fontWeight:'bold', fontSize:'18px'}}>{cat}</span>
+                             <div style={{display:'flex', gap:'10px'}}>
+                                <button disabled={idx===0} onClick={()=>moveCategory(idx, -1)} style={{padding:'8px 15px', cursor: idx===0 ? 'not-allowed' : 'pointer', border:'1px solid #ccc', borderRadius:'6px', background: idx===0 ? '#eee' : '#fff'}}>↑ 往上</button>
+                                <button disabled={idx===locallySortedCategories.length-1} onClick={()=>moveCategory(idx, 1)} style={{padding:'8px 15px', cursor: idx===locallySortedCategories.length-1 ? 'not-allowed' : 'pointer', border:'1px solid #ccc', borderRadius:'6px', background: idx===locallySortedCategories.length-1 ? '#eee' : '#fff'}}>↓ 往下</button>
+                             </div>
+                          </div>
+                       ))}
+                       <button onClick={handleSaveCategoryOrder} style={{marginTop:'20px', width:'100%', padding:'15px', background:'var(--primary-color)', color:'#fff', border:'none', borderRadius:'8px', fontSize:'18px', fontWeight:'bold', cursor:'pointer'}}>儲存排序結果</button>
+                     </div>
+                   )}
+                 </div>
+               </div>
             )}
             {activeTab === 'dashboard' && (
               <div>

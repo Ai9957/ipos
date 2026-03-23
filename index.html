@@ -30,6 +30,12 @@
       const getMenu = (callback) => {
         if (dbMode === 'firebase') return dbInstance.collection('menu_items').onSnapshot((s) => callback(s.docs.map(doc => ({ ...doc.data(), id: doc.id }))));
       };
+      const getCategoryOrder = (callback) => {
+        if (dbMode === 'firebase') return dbInstance.collection('settings').doc('category_order').onSnapshot((s) => callback(s.exists ? (s.data().order || []) : []));
+      };
+      const saveCategoryOrder = async (orderArr) => {
+        if (dbMode === 'firebase') await dbInstance.collection('settings').doc('category_order').set({ order: orderArr });
+      };
       const saveMenuItem = async (item) => {
         const data = { ...item }; let id = data.id; delete data.id;
         if (dbMode === 'firebase') { if(id) await dbInstance.collection('menu_items').doc(String(id)).update(data); else await dbInstance.collection('menu_items').add(data); }
@@ -38,7 +44,7 @@
       const importDefaultMenu = async (defaultItems) => {
         if (dbMode === 'firebase') { const batch = dbInstance.batch(); defaultItems.forEach(item => batch.set(dbInstance.collection('menu_items').doc(item.id.toString()), item)); await batch.commit(); }
       };
-      return { saveOrder, updateOrderStatus, subscribeToOrders, getMenu, saveMenuItem, deleteMenuItem, importDefaultMenu };
+      return { saveOrder, updateOrderStatus, subscribeToOrders, getMenu, getCategoryOrder, saveCategoryOrder, saveMenuItem, deleteMenuItem, importDefaultMenu };
     })();
   </script>
 </head>
@@ -52,11 +58,22 @@
     function App() {
       const [menuItems, setMenuItems] = useState([]);
       const [isMenuLoaded, setIsMenuLoaded] = useState(false);
+      const [categoryOrder, setCategoryOrder] = useState([]);
       
+      useEffect(() => {
+        const unsub = window.POSDatabase.getCategoryOrder?.(setCategoryOrder);
+        return () => unsub && unsub();
+      }, []);
+
       const computedCategories = useMemo(() => {
-        const cats = new Set(menuItems.map(item => categoryLabelMap[item.category] || item.category).filter(Boolean));
-        return [{ id: 'all', name: '全部' }, ...Array.from(cats).map(c => ({ id: c, name: c }))];
-      }, [menuItems]);
+        const catsArray = Array.from(new Set(menuItems.map(item => categoryLabelMap[item.category] || item.category).filter(Boolean)));
+        catsArray.sort((a,b) => {
+           let ia = categoryOrder.indexOf(a), ib = categoryOrder.indexOf(b);
+           if(ia===-1) ia=999; if(ib===-1) ib=999;
+           return ia - ib;
+        });
+        return [{ id: 'all', name: '全部' }, ...catsArray.map(c => ({ id: c, name: c }))];
+      }, [menuItems, categoryOrder]);
 
       const [activeCategory, setActiveCategory] = useState('all');
       const [cartItems, setCartItems] = useState([]);
