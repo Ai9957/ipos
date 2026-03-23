@@ -96,10 +96,18 @@
       const completedOrders = orders.filter(o => o.status === 'completed');
       const todayTotal = orders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
 
-      const handleSaveMenu = async (e) => {
-        e.preventDefault();
-        await window.POSDatabase.saveMenuItem(editingItem);
-        setEditingItem(null);
+      const handleSaveMenu = async () => {
+        if (!editingItem.name || !editingItem.image || editingItem.price <= 0) {
+           alert("備註：餐點名稱、圖片網址為必填，且價格必須大於 0！");
+           return;
+        }
+        try {
+           await window.POSDatabase.saveMenuItem(editingItem);
+           alert("儲存成功！");
+           setEditingItem(null);
+        } catch(e) {
+           alert("Firebase 儲存失敗：" + e.message);
+        }
       };
 
       return (
@@ -154,10 +162,10 @@
                 {editingItem ? (
                    <div style={{background:'#fff', padding:'30px', borderRadius:'12px', maxWidth:'600px', margin:'0 auto'}}>
                      <h3>{editingItem.id ? '編輯餐點' : '新增餐點'}</h3>
-                     <form onSubmit={handleSaveMenu}>
+                     <div>
                         <div style={{marginBottom:'15px'}}>
                            <label className="input-label">餐點名稱</label>
-                           <input required className="input-field" value={editingItem.name} onChange={e=>setEditingItem({...editingItem, name: e.target.value})} />
+                           <input className="input-field" value={editingItem.name} onChange={e=>setEditingItem({...editingItem, name: e.target.value})} />
                         </div>
                         <div style={{marginBottom:'15px'}}>
                            <label className="input-label">餐點分類</label>
@@ -167,11 +175,11 @@
                         </div>
                         <div style={{marginBottom:'15px'}}>
                            <label className="input-label">販售價格</label>
-                           <input required type="number" className="input-field" value={editingItem.price} onChange={e=>setEditingItem({...editingItem, price: Number(e.target.value)})} />
+                           <input type="number" className="input-field" value={editingItem.price} onChange={e=>setEditingItem({...editingItem, price: Number(e.target.value)})} />
                         </div>
                         <div style={{marginBottom:'15px'}}>
                            <label className="input-label">圖片網址 (URL)</label>
-                           <input required className="input-field" value={editingItem.image} onChange={e=>setEditingItem({...editingItem, image: e.target.value})} />
+                           <input className="input-field" value={editingItem.image} onChange={e=>setEditingItem({...editingItem, image: e.target.value})} />
                            {editingItem.image && <img src={editingItem.image} style={{marginTop:'10px', width:'80px', height:'80px', objectFit:'cover', borderRadius:'8px'}} />}
                         </div>
                         <div style={{marginBottom:'25px'}}>
@@ -181,10 +189,10 @@
                            </label>
                         </div>
                         <div style={{display:'flex', gap:'15px'}}>
-                           <button type="submit" className="btn-done" style={{flex:2}}>儲存</button>
+                           <button type="button" onClick={handleSaveMenu} className="btn-done" style={{flex:2}}>儲存</button>
                            <button type="button" onClick={()=>setEditingItem(null)} style={{flex:1, background:'#ddd', cursor:'pointer', border:'none', borderRadius:'8px', fontWeight:'bold'}}>取消</button>
                         </div>
-                     </form>
+                     </div>
                    </div>
                 ) : (
                    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(350px, 1fr))', gap:'20px'}}>
