@@ -80,6 +80,7 @@
       const [selectedProduct, setSelectedProduct] = useState(null);
       const [selectedModifiers, setSelectedModifiers] = useState([]);
       const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+      const [showSuccessModal, setShowSuccessModal] = useState(false);
 
       const getOptionsList = (product) => {
         if (product.customOptions) {
@@ -174,9 +175,9 @@
 
         try {
           await window.POSDatabase.saveOrder(orderData);
-          alert(`訂單已成功送出！`);
           setCartItems([]);
           setShowCheckoutModal(false);
+          setShowSuccessModal(true);
         } catch (error) {
           alert('結帳失敗：' + error.message);
         }
@@ -348,6 +349,22 @@
                     確認送出訂單
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {showSuccessModal && (
+            <div className="modal-overlay" onClick={() => setShowSuccessModal(false)}>
+              <div className="modal-box" style={{ width: '400px', textAlign: 'center', padding: '40px' }} onClick={e => e.stopPropagation()}>
+                <div style={{ fontSize: '80px', color: '#4cd137', marginBottom: '20px' }}>✓</div>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '30px' }}>訂單已成功送出！</div>
+                <button 
+                  className="btn btn-confirm" 
+                  onClick={() => setShowSuccessModal(false)}
+                  style={{ background: 'var(--primary-color)', color: '#fff', width: '100%', padding: '15px', fontSize: '20px' }}
+                >
+                  太棒了！
+                </button>
               </div>
             </div>
           )}
