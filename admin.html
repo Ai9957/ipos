@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>POS 後台與 KDS 廚房看板</title>
+  <link rel="stylesheet" href="index.css">
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>  <!-- Database Logic -->
+  <script>
+    window.POSDatabase = (function() {
+      const firebaseConfig = {
+        apiKey: "AIzaSyDTsrdVcwm7mi2aGoexNG4QqcEyn6JFqpw", 
+        authDomain: "project-a60e1765-a61e-40db-82e.firebaseapp.com", 
+        projectId: "project-a60e1765-a61e-40db-82e",
+      };
+
+      let dbMode = 'local';
+      let dbInstance = null;
+
+      if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
+        try {
+          if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+          }
+          dbInstance = firebase.firestore();
+          dbMode = 'firebase';
+        } catch(e) {
+          console.error("Firebase err", e);
+        }
+      }
+
+      const saveOrder = async (orderInfo) => {
+        const newOrder = {
+          ...orderInfo,
+          status: 'pending',
+          createdAt: new Date().toISOString()
+        };
+
+        if (dbMode === 'firebase') {
+          await dbInstance.collection('orders').add(newOrder);
+        } else {
+          newOrder.id = 'ORD-' + Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
+          const orders = JSON.parse(localStorage.getItem('pos_orders') || '[]');
+          orders.push(newOrder);
+          localStorage.setItem('pos_orders', JSON.stringify(orders));
+          window.dispatchEvent(new CustomEvent('local-db-update'));
+        }
+      };
+
+      const updateOrderStatus = async (orderId, status) => {
+        if (dbMode === 'firebase') {
+          await dbInstance.collection('orders').doc(orderId).update({ status });
+        } else {
+          const orders = JSON.parse(localStorage.getItem('pos_orders') || '[]');
+          const index = orders.findIndex(o => o.id === orderId);
+          if (index !== -1) {
+            orders[index].status = status;
+            localStorage.setItem('pos_orders', JSON.stringify(orders));
+            window.dispatchEvent(new CustomEvent('local-db-update'));
+          }
+        }
+      };
+
+      const subscribeToOrders = (callback) => {
+        if (dbMode === 'firebase') {
+          return dbInstance.collection('orders')
+            .orderBy('createdAt', 'desc')
+            .onSnapshot((snapshot) => {
+              const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+              callback(orders);
+            });
+        } else {
+          const emitCallback = () => {
+            const orders = JSON.parse(localStorage.getItem('pos_orders') || '[]');
+            callback(orders.reverse());
+          };
+          window.addEventListener('storage', (e) => { if (e.key === 'pos_orders') emitCallback(); });
+          window.addEventListener('local-db-update', emitCallback);
+          emitCallback();
+          return () => {};
+        }
+      };
+      return { saveOrder, updateOrderStatus, subscribeToOrders };
+    })();
+  </script>
+  <style>
+    .admin-layout { display: flex; height: 100vh; width: 100vw; background: #f5f6fa; overflow: hidden; }
+    .kds-container { flex: 1; padding: 20px 40px; overflow-y: auto; }
+    .tabs { display: flex; gap: 20px; margin-bottom: 30px; border-bottom: 2px solid #ddd; }
+    .tab { padding: 10px 20px; cursor: pointer; font-size: 18px; font-weight: bold; color: #777; }
+    .tab.active { border-bottom: 3px solid var(--primary-color); color: var(--primary-color); }
+    .order-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+    .order-card { background: #fff; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); overflow: hidden; display: flex; flex-direction: column; animation: modalIn 0.3s ease; }
+    .order-card-header { background: #f75c03; color: #fff; padding: 15px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+    .order-card-header.completed { background: #4cd137; }
+    .order-summary { font-size: 24px; }
+    .order-items { padding: 15px; flex: 1; min-height: 150px; background: #fafafa; }
+    .kds-item { margin-bottom: 12px; font-size: 18px; border-bottom: 1px dashed #e1e1e1; padding-bottom: 12px; }
+    .kds-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .qty { font-weight: bold; color: var(--primary-color); font-size: 22px; margin-right: 15px; background: #fff3ed; padding: 2px 10px; border-radius: 8px; }
+    .card-actions { padding: 15px; border-top: 1px solid #f0f0f0; background: #fff; }
+    .btn-done { width: 100%; padding: 16px; background: #4cd137; color: #fff; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 10px rgba(76, 209, 55, 0.3); }
+    .btn-done:active { transform: scale(0.98); }
+    .btn-undo { background: #7f8fa6; box-shadow: none; }
+    .dashboard { display: flex; gap: 30px; margin-bottom: 30px; flex-wrap: wrap; }
+    .stat-card { background: #fff; padding: 30px; border-radius: 12px; flex: 1; min-width: 250px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center; }
+    .stat-value { font-size: 48px; font-weight: bold; color: var(--primary-color); margin-top: 15px; }
+    h2 { font-size: 28px; color: #2f3640; border-bottom: 2px solid #eee; padding-bottom: 15px; margin-bottom: 20px;}
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    function AdminApp() {
+      const [activeTab, setActiveTab] = useState('kds');
+      const [orders, setOrders] = useState([]);
+      const [error, setError] = useState(null);
+
+      useEffect(() => {
+        try {
+          if (!window.POSDatabase) {
+            throw new Error('資料庫腳本未載入成功。');
+          }
+          const unsubscribe = window.POSDatabase.subscribeToOrders((data) => {
+            setOrders(data || []);
+          });
+          return () => unsubscribe();
+        } catch (err) {
+          setError(err.message);
+        }
+      }, []);
+
+      if (error) {
+        return <div style={{padding: '50px', color: 'red', fontSize: '20px'}}>系統發生錯誤：{error}</div>;
+      }
+
+      const pendingOrders = orders.filter(o => o.status === 'pending');
+      const completedOrders = orders.filter(o => o.status === 'completed');
+      
+      const todayTotal = orders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
+
+      const markAsDone = async (orderId) => {
+        try { await window.POSDatabase.updateOrderStatus(orderId, 'completed'); } catch(e) { alert(e); }
+      };
+
+      const markAsPending = async (orderId) => {
+        try { await window.POSDatabase.updateOrderStatus(orderId, 'pending'); } catch(e) { alert(e); }
+      };
+
+      const getOrderNo = (id) => {
+        return (id || '').includes('-') ? id.split('-')[1] : (id || '').substring(0, 6);
+      };
+
+      const getTime = (createdAt) => {
+        return createdAt ? new Date(createdAt).toLocaleTimeString() : 'N/A';
+      };
+
+      return (
+        <div className="admin-layout">
+          <div className="side-nav">
+            <div className="logo" style={{ color: '#2f3640', fontSize: '20px' }}>管理後台 & KDS</div>
+            <div className={`nav-item ${activeTab === 'kds' ? 'active' : ''}`} onClick={() => setActiveTab('kds')}>
+              廚房看板 ({pendingOrders.length})
+            </div>
+            <div className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
+              今日營業額
+            </div>
+            <div className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
+              出餐紀錄
+            </div>
+            <div style={{ marginTop: 'auto', marginBottom: '20px', width: '80%' }}>
+              <a href="/index.html" target="_blank" className="nav-item" style={{display: 'block', textDecoration: 'none', color: '#ff4757', border: '1px solid #ffeaa7'}}>返回前台 🍔</a>
+            </div>
+          </div>
+
+          <div className="kds-container">
+            {activeTab === 'kds' && (
+              <div>
+                <h2>等待製作 ({pendingOrders.length})</h2>
+                <div className="order-grid">
+                  {pendingOrders.map(order => (
+                    <div key={order.id} className="order-card">
+                      <div className="order-card-header">
+                        <span className="order-summary">單號: {getOrderNo(order.id)}</span>
+                        <span style={{opacity: 0.8}}>{getTime(order.createdAt)}</span>
+                      </div>
+                      <div className="order-items">
+                        {(order.items || []).map((item, idx) => (
+                          <div key={item.id || idx} className="kds-item">
+                            <span className="qty">{item.quantity || 1}</span> {item.title || item.name || '未知餐點'}
+                          </div>
+                        ))}
+                        {!(order.items && order.items.length) && <div style={{color: 'red'}}>此為空測試訂單</div>}
+                      </div>
+                      <div className="card-actions">
+                        <button className="btn-done" onClick={() => markAsDone(order.id)}>完成出餐</button>
+                      </div>
+                    </div>
+                  ))}
+                  {pendingOrders.length === 0 && <div style={{ color: '#999', fontSize: '18px' }}>目前沒有待處理的訂單，辛苦了！</div>}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'dashboard' && (
+              <div>
+                <h2>今日營業概況</h2>
+                <div className="dashboard">
+                  <div className="stat-card">
+                    <div style={{fontSize: '20px', color: '#777'}}>總接單數</div>
+                    <div className="stat-value">{orders.length} 筆</div>
+                  </div>
+                  <div className="stat-card">
+                    <div style={{fontSize: '20px', color: '#777'}}>今日累積營業額</div>
+                    <div className="stat-value">${todayTotal.toLocaleString()}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'history' && (
+              <div>
+                <h2>歷史訂單 (已完成出餐)</h2>
+                <div className="order-grid">
+                  {completedOrders.map(order => (
+                    <div key={order.id} className="order-card">
+                      <div className="order-card-header completed">
+                        <span className="order-summary">單號: {getOrderNo(order.id)}</span>
+                        <span style={{opacity: 0.8}}>${order.totalAmount || 0}</span>
+                      </div>
+                      <div className="order-items" style={{opacity: 0.7}}>
+                        {(order.items || []).map((item, idx) => (
+                          <div key={item.id || idx} className="kds-item" style={{fontSize: '15px'}}>
+                            <span className="qty" style={{fontSize: '15px', color: '#555', background: 'transparent'}}>{item.quantity || 1} x</span> {item.title || '未知餐點'}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="card-actions">
+                        <button className="btn-done btn-undo" onClick={() => markAsPending(order.id)}>撤銷完成 (退回廚房)</button>
+                      </div>
+                    </div>
+                  ))}
+                  {completedOrders.length === 0 && <div style={{ color: '#999', fontSize: '18px' }}>尚無完成的訂單。</div>}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<AdminApp />);
+  </script>
+</body>
+</html>

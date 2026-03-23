@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>線上快餐店 POS 系統</title>
+  <link rel="stylesheet" href="index.css">
+  <!-- Firebase Compat UI -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <!-- React & Babel -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script>
+    window.POSDatabase = (function() {
+      const firebaseConfig = {
+        apiKey: "AIzaSyDTsrdVcwm7mi2aGoexNG4QqcEyn6JFqpw", 
+        authDomain: "project-a60e1765-a61e-40db-82e.firebaseapp.com", 
+        projectId: "project-a60e1765-a61e-40db-82e",
+      };
+
+      let dbMode = 'local';
+      let dbInstance = null;
+
+      if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
+        try {
+          if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+          }
+          dbInstance = firebase.firestore();
+          dbMode = 'firebase';
+        } catch(e) {
+          console.error("Firebase err", e);
+        }
+      }
+
+      const saveOrder = async (orderInfo) => {
+        const newOrder = {
+          ...orderInfo,
+          status: 'pending',
+          createdAt: new Date().toISOString()
+        };
+
+        if (dbMode === 'firebase') {
+          await dbInstance.collection('orders').add(newOrder);
+        } else {
+          newOrder.id = 'ORD-' + Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
+          const orders = JSON.parse(localStorage.getItem('pos_orders') || '[]');
+          orders.push(newOrder);
+          localStorage.setItem('pos_orders', JSON.stringify(orders));
+          window.dispatchEvent(new CustomEvent('local-db-update'));
+        }
+      };
+
+      const updateOrderStatus = async (orderId, status) => {
+        if (dbMode === 'firebase') {
+          await dbInstance.collection('orders').doc(orderId).update({ status });
+        } else {
+          const orders = JSON.parse(localStorage.getItem('pos_orders') || '[]');
+          const index = orders.findIndex(o => o.id === orderId);
+          if (index !== -1) {
+            orders[index].status = status;
+            localStorage.setItem('pos_orders', JSON.stringify(orders));
+            window.dispatchEvent(new CustomEvent('local-db-update'));
+          }
+        }
+      };
+
+      const subscribeToOrders = (callback) => {
+        if (dbMode === 'firebase') {
+          return dbInstance.collection('orders')
+            .orderBy('createdAt', 'desc')
+            .onSnapshot((snapshot) => {
+              const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+              callback(orders);
+            });
+        } else {
+          const emitCallback = () => {
+            const orders = JSON.parse(localStorage.getItem('pos_orders') || '[]');
+            callback(orders.reverse());
+          };
+          window.addEventListener('storage', (e) => { if (e.key === 'pos_orders') emitCallback(); });
+          window.addEventListener('local-db-update', emitCallback);
+          emitCallback();
+          return () => {};
+        }
+      };
+      return { saveOrder, updateOrderStatus, subscribeToOrders };
+    })();
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const menuData = [
+      { id: 1, name: '經典牛肉堡', price: 120, category: 'burger', image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=200&h=200' },
+      { id: 2, name: '雙層起司堡', price: 150, category: 'burger', image: 'https://images.unsplash.com/photo-1586816001966-79b736744398?auto=format&fit=crop&q=80&w=200&h=200' },
+      { id: 3, name: '脆皮炸雞', price: 60, category: 'snack', image: 'https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?auto=format&fit=crop&q=80&w=200&h=200' },
+      { id: 4, name: '黃金脆薯', price: 50, category: 'snack', image: 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&q=80&w=200&h=200' },
+      { id: 5, name: '可口可樂', price: 40, category: 'drink', image: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&q=80&w=200&h=200' },
+      { id: 6, name: '冰紅茶', price: 35, category: 'drink', image: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?auto=format&fit=crop&q=80&w=200&h=200' },
+      { id: 7, name: '經典套餐', price: 200, category: 'combo', image: 'https://images.unsplash.com/photo-1610614819515-6899ba89e5fc?auto=format&fit=crop&q=80&w=200&h=200' }
+    ];
+
+    const categories = [
+      { id: 'all', name: '全部' },
+      { id: 'burger', name: '漢堡' },
+      { id: 'snack', name: '點心' },
+      { id: 'drink', name: '飲料' },
+      { id: 'combo', name: '套餐' }
+    ];
+
+    const { useState, useMemo } = React;
+
+    function App() {
+      const [activeCategory, setActiveCategory] = useState('all');
+      const [cartItems, setCartItems] = useState([]);
+      const [selectedProduct, setSelectedProduct] = useState(null);
+      const [modifiers, setModifiers] = useState({ ice: '正常冰', sugar: '正常糖' });
+
+      const filteredProducts = useMemo(() => {
+        if (activeCategory === 'all') return menuData;
+        return menuData.filter(item => item.category === activeCategory);
+      }, [activeCategory]);
+
+      const totalAmount = useMemo(() => {
+        return cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      }, [cartItems]);
+
+      const handleProductClick = (product) => {
+        if (product.category === 'drink') {
+          setSelectedProduct(product);
+          setModifiers({ ice: '正常冰', sugar: '正常糖' });
+        } else {
+          addToCart(product, []);
+        }
+      };
+
+      const addToCart = (product, activeMods) => {
+        const modString = activeMods.length > 0 ? ` (${activeMods.join(', ')})` : '';
+        const cartItemId = `${product.id}-${activeMods.join('-')}`;
+        
+        setCartItems(prev => {
+          const existingItem = prev.find(item => item.cartItemId === cartItemId);
+          if (existingItem) {
+            return prev.map(item => 
+              item.cartItemId === cartItemId 
+              ? { ...item, quantity: item.quantity + 1 } 
+              : item
+            );
+          }
+          return [...prev, { 
+            ...product, 
+            cartItemId, 
+            title: product.name + modString,
+            quantity: 1 
+          }];
+        });
+        setSelectedProduct(null);
+      };
+
+      const updateQuantity = (cartItemId, delta) => {
+        setCartItems(prev => prev.map(item => {
+          if (item.cartItemId === cartItemId) {
+            const newQuantity = item.quantity + delta;
+            return { ...item, quantity: newQuantity > 0 ? newQuantity : 1 };
+          }
+          return item;
+        }));
+      };
+
+      const removeItem = (cartItemId) => {
+        setCartItems(prev => prev.filter(item => item.cartItemId !== cartItemId));
+      };
+
+      const checkout = async () => {
+        if (cartItems.length === 0) return;
+
+        const orderData = {
+          totalAmount,
+          items: cartItems.map(item => ({
+            id: item.cartItemId,
+            name: item.name,
+            title: item.title,
+            price: item.price,
+            quantity: item.quantity
+          }))
+        };
+
+        try {
+          // 儲存訂單到 Firebase (或跨分頁本地儲存)
+          await window.POSDatabase.saveOrder(orderData);
+          alert(`結帳成功！訂單已即時同步至廚房 KDS。總金額為 $${totalAmount}`);
+          setCartItems([]);
+        } catch (error) {
+          alert('結帳失敗：' + error.message);
+        }
+      };
+
+      return (
+        <div className="pos-layout">
+          <nav className="side-nav">
+            <div className="logo">POS</div>
+            {categories.map(cat => (
+              <div 
+                key={cat.id} 
+                className={`nav-item ${activeCategory === cat.id ? 'active' : ''}`}
+                onClick={() => setActiveCategory(cat.id)}
+              >
+                {cat.name}
+              </div>
+            ))}
+            <div style={{ marginTop: 'auto', marginBottom: '20px', width: '80%' }}>
+              <a href="/admin.html" target="_blank" className="nav-item" style={{display: 'block', textDecoration: 'none', color: '#ff4757', border: '1px solid #ffeaa7'}}>前往後台 ⚙️</a>
+            </div>
+          </nav>
+
+          <main className="main-content">
+            <header className="header">
+              <h1>{categories.find(c => c.id === activeCategory)?.name || '全部'}</h1>
+            </header>
+            <div className="menu-grid">
+              {filteredProducts.map(product => (
+                <div 
+                  key={product.id} 
+                  className="menu-card"
+                  onClick={() => handleProductClick(product)}
+                >
+                  <div className="card-img-wrapper">
+                    <img src={product.image} className="card-img" alt={product.name} />
+                  </div>
+                  <div className="card-info">
+                    <div className="card-title">{product.name}</div>
+                    <div className="card-price">${product.price}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </main>
+
+          <aside className="cart-sidebar">
+            <div className="cart-header">
+              <h2>目前訂單</h2>
+            </div>
+            <div className="cart-items">
+              {cartItems.length === 0 ? (
+                <div className="cart-empty">尚未加入任何餐點</div>
+              ) : (
+                cartItems.map(item => (
+                  <div key={item.cartItemId} className="cart-item">
+                    <div className="cart-item-main">
+                      <span className="cart-item-title">{item.title}</span>
+                      <span className="cart-item-price">${item.price * item.quantity}</span>
+                    </div>
+                    <div className="cart-item-actions">
+                      <div className="qty-btn-group">
+                        <button className="qty-btn" onClick={() => updateQuantity(item.cartItemId, -1)}>-</button>
+                        <span className="qty-label">{item.quantity}</span>
+                        <button className="qty-btn" onClick={() => updateQuantity(item.cartItemId, 1)}>+</button>
+                      </div>
+                      <button className="delete-btn" onClick={() => removeItem(item.cartItemId)}>刪除</button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="cart-footer">
+              <div className="summary-row">
+                <span>總計</span>
+                <span style={{color: 'var(--primary-color)'}}>${totalAmount}</span>
+              </div>
+              <button 
+                className="checkout-btn" 
+                onClick={checkout}
+                disabled={cartItems.length === 0}
+              >
+                前往結帳
+              </button>
+            </div>
+          </aside>
+
+          {selectedProduct && (
+            <div className="modal-overlay" onClick={() => setSelectedProduct(null)}>
+              <div className="modal-box" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                  選擇 {selectedProduct.name} 選項
+                </div>
+                
+                <div className="modifier-section">
+                  <div className="modifier-title">冰塊</div>
+                  <div className="modifier-options">
+                    {['正常冰', '少冰', '微冰', '去冰'].map(opt => (
+                      <div 
+                        key={opt}
+                        className={`mod-option ${modifiers.ice === opt ? 'active' : ''}`}
+                        onClick={() => setModifiers(prev => ({...prev, ice: opt}))}
+                      >
+                        {opt}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="modifier-section">
+                  <div className="modifier-title">甜度</div>
+                  <div className="modifier-options">
+                    {['正常糖', '少糖', '半糖', '微糖', '無糖'].map(opt => (
+                      <div 
+                        key={opt}
+                        className={`mod-option ${modifiers.sugar === opt ? 'active' : ''}`}
+                        onClick={() => setModifiers(prev => ({...prev, sugar: opt}))}
+                      >
+                        {opt}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="modal-actions">
+                  <button className="btn btn-cancel" onClick={() => setSelectedProduct(null)}>取消</button>
+                  <button 
+                    className="btn btn-confirm" 
+                    onClick={() => addToCart(selectedProduct, [modifiers.ice, modifiers.sugar])}
+                  >
+                    加入訂單
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
