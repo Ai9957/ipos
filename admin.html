@@ -85,6 +85,7 @@
     .input-label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
     .sound-toggle { position: absolute; top: 20px; right: 40px; background: #fff; border: 2px solid #2ed573; padding: 10px 25px; border-radius: 30px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.1); z-index: 10; transition: all 0.2s; }
     .sound-toggle.muted { border-color: #dcdde1; color: #7f8c8d; }
+    .type-badge { padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; background: rgba(255,255,255,0.2); }
   </style>
 </head>
 <body onClick="(() => { const a = document.getElementById('orderAudio'); if(a && a.paused) { a.muted = true; a.play().then(() => { a.pause(); a.muted = false; console.log('Audio unlocked'); }).catch(() => {}); } })()">
@@ -127,7 +128,10 @@
         <div className="order-card" style={{ border: `2px solid ${color}` }}>
           <div className="order-card-header" style={{ background: color, display:'flex', flexDirection:'column', alignItems:'flex-start', padding:'10px 15px' }}>
             <div style={{ display:'flex', justifyContent:'space-between', width:'100%', alignItems:'center' }}>
-              <span className="order-summary">單號: {getOrderNo(order.id)}</span>
+              <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                <span className="order-summary">單號: {getOrderNo(order.id)}</span>
+                <span className="type-badge">{order.orderType || '內用'}</span>
+              </div>
               <span style={{ fontSize:'14px', opacity:0.9 }}>{new Date(order.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} 入單</span>
             </div>
             <div style={{ fontSize:'16px', fontWeight:'bold', marginTop:'5px' }}>已等候 {elapsed} 分鐘</div>
@@ -554,10 +558,14 @@
                       <div key={order.id} className="order-card" style={{ border: 'none', background:'#fff' }}>
                         <div className="order-card-header" style={{ background: '#7f8fa6', display:'flex', flexDirection:'column', alignItems:'flex-start', padding:'10px 15px' }}>
                           <div style={{ display:'flex', justifyContent:'space-between', width:'100%', alignItems:'center' }}>
-                            <span className="order-summary">單號: {getOrderNo(order.id)}</span>
+                            <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                              <span className="order-summary">單號: {getOrderNo(order.id)}</span>
+                              <span className="type-badge">{order.orderType || '內用'}</span>
+                            </div>
                             <span style={{opacity:0.9, fontSize:'18px'}}>${order.totalAmount || 0}</span>
                           </div>
                           <div style={{ fontSize:'13px', marginTop:'5px', opacity:0.9 }}>
+                             支付: {order.paymentMethod || 'N/A'} | 
                              入單: {new Date(order.createdAt).toLocaleTimeString()} | 
                              出餐: {order.completedAt ? new Date(order.completedAt).toLocaleTimeString() : 'N/A'} | 
                              製作耗時: {duration} 分鐘
