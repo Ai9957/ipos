@@ -30,7 +30,13 @@
       const getItemOrders = (callback) => {
         if (dbMode === 'firebase') return dbInstance.collection('settings').doc('item_orders').onSnapshot((s) => callback(s.exists ? s.data() : {}));
       };
-      return { saveOrder, getMenu, getCategoryOrder, getItemOrders };
+      const getUIVisibility = (callback) => {
+        if (dbMode === 'firebase') return dbInstance.collection('settings').doc('ui_visibility').onSnapshot((s) => callback(s.exists ? s.data() : { 
+          types: ['內用', '外帶', '外送'], 
+          payments: ['現金', '信用卡', 'LINE Pay'] 
+        }));
+      };
+      return { saveOrder, getMenu, getCategoryOrder, getItemOrders, getUIVisibility };
     })();
   </script>
 </head>
@@ -49,6 +55,7 @@
       const [showCheckout, setShowCheckout] = useState(false);
       const [showSuccessModal, setShowSuccessModal] = useState(false);
       const [lastOrderDetails, setLastOrderDetails] = useState(null);
+      const [uiVisibility, setUiVisibility] = useState({ types: ['內用', '外帶', '外送'], payments: ['現金', '信用卡', 'LINE Pay'] });
       const [showOptionsModal, setShowOptionsModal] = useState(null);
       const [selectedOptions, setSelectedOptions] = useState([]);
 
@@ -62,8 +69,18 @@
         const unsubMenu = window.POSDatabase.getMenu(setMenuItems);
         const unsubCat = window.POSDatabase.getCategoryOrder(setCategoryOrder);
         const unsubItemOrders = window.POSDatabase.getItemOrders(setItemOrders);
-        return () => { unsubMenu(); unsubCat(); unsubItemOrders(); };
+        const unsubUIVisibility = window.POSDatabase.getUIVisibility(setUiVisibility);
+        return () => { unsubMenu(); unsubCat(); unsubItemOrders(); unsubUIVisibility(); };
       }, []);
+
+      useEffect(() => {
+        if (!uiVisibility.types.includes(orderType) && uiVisibility.types.length > 0) {
+          setOrderType(uiVisibility.types[0]);
+        }
+        if (!uiVisibility.payments.includes(paymentMethod) && uiVisibility.payments.length > 0) {
+          setPaymentMethod(uiVisibility.payments[0]);
+        }
+      }, [uiVisibility]);
 
       const categoryLabelMap = { burger: '漢堡', snack: '點心', drink: '飲料', combo: '套餐' };
       const categories = useMemo(() => {
@@ -253,7 +270,7 @@
                   <div style={{marginBottom:'20px'}}>
                     <div className="modifier-title">點餐類型</div>
                     <div className="modifier-options">
-                      {['內用', '外帶', '外送'].map(t => (
+                      {uiVisibility.types.map(t => (
                         <div key={t} className={`mod-option ${orderType === t ? 'active' : ''}`} style={{padding:'12px 25px'}} onClick={() => setOrderType(t)}>{t}</div>
                       ))}
                     </div>
@@ -262,7 +279,7 @@
                   <div style={{marginBottom:'25px'}}>
                     <div className="modifier-title">支付方式</div>
                     <div className="modifier-options">
-                      {['現金', '信用卡', 'LINE Pay'].map(p => (
+                      {uiVisibility.payments.map(p => (
                         <div key={p} className={`mod-option ${paymentMethod === p ? 'active' : ''}`} style={{padding:'12px 25px'}} onClick={() => setPaymentMethod(p)}>{p}</div>
                       ))}
                     </div>
