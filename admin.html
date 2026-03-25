@@ -77,10 +77,34 @@
   </script>
   <style>
     .admin-layout { display: flex; height: 100vh; width: 100vw; background: #f5f6fa; overflow: hidden; }
-    .kds-container { flex: 1; padding: 20px 40px; overflow-y: auto; position: relative; }
-    .nav-item { padding: 15px 20px; font-size: 18px; font-weight: bold; color: #555; cursor: pointer; border-radius: 8px; margin-bottom: 10px; transition: all 0.2s; }
+    .side-nav { width: 250px; background: #fff; padding: 20px; display: flex; flex-direction: column; border-right: 1px solid #eee; transition: width 0.3s; position: relative; }
+    .admin-layout.collapsed .side-nav { width: 80px; padding: 20px 10px; }
+    .kds-container { flex: 1; padding: 20px 40px; overflow-y: auto; position: relative; transition: padding 0.3s; }
+    .nav-item { padding: 15px 20px; font-size: 18px; font-weight: bold; color: #555; cursor: pointer; border-radius: 8px; margin-bottom: 10px; transition: all 0.2s; display: flex; align-items: center; gap: 10px; white-space: nowrap; overflow: hidden; }
     .nav-item:hover { background: #e1e5ee; }
     .nav-item.active { background: var(--primary-color); color: #fff; }
+    .admin-layout.collapsed .nav-item { justify-content: center; padding: 15px 0; }
+    .admin-layout.collapsed .nav-item span:not(.icon) { display: none; }
+    
+    .collapse-btn { 
+      position: absolute; 
+      top: 15px; 
+      right: -12px; 
+      width: 24px; 
+      height: 24px; 
+      background: var(--primary-color); 
+      color: #fff; 
+      border-radius: 50%; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      cursor: pointer; 
+      border: 2px solid #fff; 
+      z-index: 100;
+      transition: transform 0.3s;
+    }
+    .admin-layout.collapsed .collapse-btn { transform: rotate(180deg); }
+    .admin-layout.collapsed .logo-text { display: none; }
     .order-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
     .order-card { background: #fff; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); overflow: hidden; display: flex; flex-direction: column; transition: transform 0.2s; }
     .order-card-header { color: #fff; padding: 15px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
@@ -202,6 +226,7 @@
       const [kdsSettings, setKdsSettings] = useState({ yellow: 5, red: 10 });
       const [uiVisibility, setUiVisibility] = useState({ types: ['內用', '外帶', '外送'], payments: ['現金', '信用卡', 'LINE Pay'] });
       const [isMuted, setIsMuted] = useState(false);
+      const [isCollapsed, setIsCollapsed] = useState(false);
       
       const lastOrderTimeRef = useRef("");
       const isInitialLoadRef = useRef(true);
@@ -350,17 +375,44 @@
       };
 
       return (
-        <div className="admin-layout">
-          <div className="side-nav" style={{width: '250px', background:'#fff', padding:'20px', display:'flex', flexDirection:'column'}}>
-            <div style={{ color: '#2f3640', fontSize: '20px', fontWeight:'bold', marginBottom:'30px' }}>管理後台 & KDS</div>
-            <div className={`nav-item ${activeTab === 'kds' ? 'active' : ''}`} onClick={() => setActiveTab('kds')}>廚房看板 ({pendingOrders.length})</div>
-            <div className={`nav-item ${activeTab === 'menu' ? 'active' : ''}`} onClick={() => setActiveTab('menu')}>菜單管理</div>
-            <div className={`nav-item ${activeTab === 'categories' ? 'active' : ''}`} onClick={() => setActiveTab('categories')}>排序管理</div>
-            <div className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>今日營業額</div>
-            <div className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>出餐紀錄</div>
-            <div className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>系統設定 ⚙️</div>
+        <div className={`admin-layout ${isCollapsed ? 'collapsed' : ''}`}>
+          <div className="side-nav">
+            <div className="collapse-btn" onClick={() => setIsCollapsed(!isCollapsed)}>
+              {isCollapsed ? '→' : '←'}
+            </div>
+            <div style={{ color: '#2f3640', fontSize: '20px', fontWeight:'bold', marginBottom:'30px', display:'flex', gap:'5px' }}>
+               <span>⚙️</span>
+               {!isCollapsed && <span className="logo-text">管理後台 & KDS</span>}
+            </div>
+            <div className={`nav-item ${activeTab === 'kds' ? 'active' : ''}`} onClick={() => setActiveTab('kds')}>
+              <span className="icon">👨‍🍳</span>
+              <span>廚房看板 ({pendingOrders.length})</span>
+            </div>
+            <div className={`nav-item ${activeTab === 'menu' ? 'active' : ''}`} onClick={() => setActiveTab('menu')}>
+              <span className="icon">📋</span>
+              <span>菜單管理</span>
+            </div>
+            <div className={`nav-item ${activeTab === 'categories' ? 'active' : ''}`} onClick={() => setActiveTab('categories')}>
+              <span className="icon">🔢</span>
+              <span>排序管理</span>
+            </div>
+            <div className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
+              <span className="icon">📊</span>
+              <span>今日營業額</span>
+            </div>
+            <div className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
+              <span className="icon">🕒</span>
+              <span>出餐紀錄</span>
+            </div>
+            <div className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
+              <span className="icon">⚙️</span>
+              <span>系統設定</span>
+            </div>
             <div style={{ marginTop: 'auto' }}>
-              <a href="index.html" target="_blank" className="nav-item" style={{display: 'block', textDecoration: 'none', color: '#ff4757', border: '1px solid #ffeaa7'}}>返回前台 🍔</a>
+              <a href="index.html" target="_blank" className="nav-item" style={{display: 'flex', textDecoration: 'none', color: '#ff4757', border: '1px solid #ffeaa7'}}>
+                <span className="icon">🍔</span>
+                <span>返回前台</span>
+              </a>
             </div>
           </div>
           <div className="kds-container">

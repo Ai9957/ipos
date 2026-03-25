@@ -64,6 +64,7 @@
       const [paymentMethod, setPaymentMethod] = useState('現金'); // 現金, 信用卡, LINE Pay
       const [amountPaid, setAmountPaid] = useState('');
       const [isProcessing, setIsProcessing] = useState(false);
+      const [isCollapsed, setIsCollapsed] = useState(false);
 
       useEffect(() => {
         const unsubMenu = window.POSDatabase.getMenu(setMenuItems);
@@ -83,6 +84,7 @@
       }, [uiVisibility]);
 
       const categoryLabelMap = { burger: '漢堡', snack: '點心', drink: '飲料', combo: '套餐' };
+      const categoryIconMap = { '漢堡': '🍔', '點心': '🍟', '飲料': '🥤', '套餐': '🍱', '全部': '🏠' };
       const categories = useMemo(() => {
         const cats = Array.from(new Set(menuItems.map(item => categoryLabelMap[item.category] || item.category).filter(Boolean)));
         const finalCats = ['全部', ...cats].sort((a, b) => {
@@ -156,12 +158,16 @@
       const change = (paymentMethod === '現金' && amountPaid) ? (Number(amountPaid) - totalAmount) : 0;
 
       return (
-        <div className="pos-layout">
+        <div className={`pos-layout ${isCollapsed ? 'collapsed' : ''}`}>
           <div className="side-nav">
-            <div className="logo">🍟</div>
+            <div className="collapse-btn" onClick={() => setIsCollapsed(!isCollapsed)}>
+               {isCollapsed ? '→' : '←'}
+            </div>
+            <div className="logo">{isCollapsed ? '🍟' : '🍟 德上POS'}</div>
             {categories.map(cat => (
               <div key={cat} className={`nav-item ${activeCategory === cat ? 'active' : ''}`} onClick={() => setActiveCategory(cat)}>
-                {cat}
+                <span className="icon" style={{fontSize: isCollapsed ? '24px' : '20px'}}>{categoryIconMap[cat] || '🍽️'}</span>
+                <span>{cat}</span>
               </div>
             ))}
           </div>
