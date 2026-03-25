@@ -89,20 +89,31 @@
         getKDSSettings, saveKDSSettings, getUIVisibility, saveUIVisibility, 
         getCategoryIcons, saveCategoryIcons,
         getBranding, saveBranding,
+        getStaff: (callback) => {
+          if (dbMode === 'firebase') return dbInstance.collection('settings').doc('staff').onSnapshot((s) => callback(s.exists ? s.data().list : [
+            { id: '1', name: '店長', title: '管理員', pin: '0000', role: 'admin' },
+            { id: '2', name: '小明', title: '組長', pin: '1111', role: 'leader' },
+            { id: '3', name: '小美', title: '收銀員', pin: '2222', role: 'cashier' }
+          ]));
+        },
+        saveStaff: async (list) => {
+          if (dbMode === 'firebase') await dbInstance.collection('settings').doc('staff').set({ list });
+        },
         saveMenuItem, deleteMenuItem, importDefaultMenu 
       };
 
     })();
   </script>
   <style>
+    * { box-sizing: border-box; }
     .admin-layout { display: flex; height: 100vh; width: 100vw; background: #f5f6fa; overflow: hidden; }
-    .side-nav { width: 250px; background: #fff; padding: 20px; display: flex; flex-direction: column; border-right: 1px solid #eee; transition: width 0.3s; position: relative; }
-    .admin-layout.collapsed .side-nav { width: 80px; padding: 20px 10px; }
-    .kds-container { flex: 1; padding: 20px 40px; overflow-y: auto; position: relative; transition: padding 0.3s; }
-    .nav-item { padding: 15px 20px; font-size: 18px; font-weight: bold; color: #555; cursor: pointer; border-radius: 8px; margin-bottom: 10px; transition: all 0.2s; display: flex; align-items: center; gap: 10px; white-space: nowrap; overflow: hidden; }
-    .nav-item:hover { background: #e1e5ee; }
-    .nav-item.active { background: var(--primary-color); color: #fff; }
-    .admin-layout.collapsed .nav-item { justify-content: center; padding: 15px 0; }
+    .side-nav { width: 280px; background: #fff; padding: 25px 20px; display: flex; flex-direction: column; border-right: 1px solid #eee; transition: width 0.3s; position: relative; overflow-y: auto; overflow-x: hidden; }
+    .admin-layout.collapsed .side-nav { width: 90px; padding: 20px 10px; }
+    .kds-container { flex: 1; padding: 20px 40px; overflow-y: auto; position: relative; transition: padding 0.3s; background: #f8fafc; }
+    .nav-item { width: 100%; padding: 16px 20px; font-size: 18px; font-weight: bold; color: #555; cursor: pointer; border-radius: 12px; margin-bottom: 8px; transition: all 0.2s; display: flex; align-items: center; gap: 12px; white-space: nowrap; border: 1px solid transparent; }
+    .nav-item:hover { background: #f0f2f5; }
+    .nav-item.active { background: var(--primary-color); color: #fff; border-color: var(--primary-color); }
+    .admin-layout.collapsed .nav-item { justify-content: center; padding: 15px 0; width: 60px; margin-left: auto; margin-right: auto; }
     .admin-layout.collapsed .nav-item span:not(.icon) { display: none; }
     
     .collapse-btn { 
@@ -198,54 +209,85 @@
 
       let color = '#2ed573'; // default green
       if (elapsed >= redThreshold) color = '#ff4757'; // urgent: red
-      else if (elapsed >= yellowThreshold) color = '#ffa502'; // warning: yellow
+      else if (elapsed >= yellowThreshold) color = '#f1c40f'; // warning: yellow
 
-      const typeColors = {
-        '內用': '#3498db', // Blue
-        '外帶': '#f39c12', // Orange
-        '外送': '#9b59b6'  // Purple
-      };
-      const typeIcons = {
-        '內用': '🏠',
-        '外帶': '🛍️',
-        '外送': '🚲'
-      };
       const currentType = order.orderType || '內用';
 
       return (
-        <div className="order-card" style={{ border: `2px solid ${color}` }}>
-          <div className="order-card-header" style={{ background: color, display:'flex', flexDirection:'column', padding:'15px', color:'#fff', position:'relative', borderBottom:'none' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', width:'100%', alignItems:'flex-start', marginBottom: '8px' }}>
-              <div style={{ display:'flex', flexDirection:'column' }}>
-                <span style={{ fontSize:'13px', opacity:0.8, marginBottom:'2px' }}>單號 (Order No.)</span>
-                <span className="order-summary" style={{ fontSize:'32px', lineHeight:'1', letterSpacing:'1px', fontFamily:'monospace', fontWeight:'900', textShadow:'0 2px 4px rgba(0,0,0,0.1)' }}>
-                  {getOrderNo(order.id)}
-                </span>
-              </div>
-              <span className="type-badge" style={{ background: typeColors[currentType] || '#7f8c8d', fontSize:'16px', padding:'6px 14px', borderRadius:'20px', display:'flex', alignItems:'center', gap:'6px', alignSelf:'flex-start', border:'2px solid rgba(255,255,255,0.3)' }}>
-                {typeIcons[currentType]} {currentType}
-              </span>
-            </div>
-            
-            <div style={{ display:'flex', justifyContent:'space-between', width:'100%', alignItems:'flex-end', borderTop:'1px rgba(255,255,255,0.3) dashed', paddingTop:'10px', marginTop:'4px' }}>
-              <span style={{ fontSize:'14px', opacity:0.9, display:'flex', alignItems:'center', gap:'5px' }}>
-                ⏱️ {new Date(order.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} 入單
-              </span>
-              <span style={{ fontSize:'18px', fontWeight:'900', background:'rgba(0,0,0,0.15)', padding:'5px 12px', borderRadius:'10px' }}>
-                等候 {elapsed} 分鐘
-              </span>
-            </div>
+        <div className="order-card" style={{ borderTop: `8px solid ${color}`, opacity: order.status === 'completed' ? 0.7 : 1 }}>
+          <div className="order-card-header" style={{ background: color, color: color === '#f1c40f' ? '#2f3640' : '#fff' }}>
+            <span style={{fontSize:'20px'}}>#{getOrderNo(order.id)}</span>
+            <span style={{fontSize:'16px'}}>{elapsed} 分鐘</span>
+          </div>
+          <div style={{padding:'10px 15px', background:'#f8f9fa', borderBottom:'1px solid #eee', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+            <span className="type-badge" style={{background: currentType ==='外送' ? '#9b59b6' : (currentType ==='外帶' ? '#f39c12' : '#1abc9c'), fontSize:'12px'}}>{currentType}</span>
+            <span style={{fontSize:'12px', color:'#777'}}>{new Date(order.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
           </div>
           <div className="order-items">
             {(order.items || []).map((item, idx) => (
-               <div key={item.id || idx} className="kds-item">
-                 <span className="qty">{item.quantity || 1}</span> {item.title || item.name}
-               </div>
+              <div key={idx} className="kds-item">
+                <span className="qty">{item.quantity}</span>
+                <span style={{fontWeight:'bold'}}>{item.title || item.name}</span>
+                {item.notes && <div style={{fontSize: '14px', color: '#e67e22', marginLeft: '45px', marginTop: '5px'}}>▫️ {item.notes}</div>}
+              </div>
             ))}
           </div>
           <div className="card-actions">
             <button className="btn-done" style={{ background: color }} onClick={() => onComplete(order.id)}>完成出餐</button>
           </div>
+        </div>
+      );
+    }
+
+    function LoginOverlay({ onLogin, staffList, branding }) {
+      const [pin, setPin] = useState('');
+      const [error, setError] = useState('');
+
+      const handleLogin = (digit) => {
+        if (digit === 'del') {
+          setPin(pin.slice(0, -1));
+          setError('');
+          return;
+        }
+        if (pin.length >= 4) return;
+        const newPin = pin + digit;
+        setPin(newPin);
+        
+        if (newPin.length === 4) {
+          const user = staffList.find(s => s.pin === newPin);
+          if (user) {
+            onLogin(user);
+          } else {
+            setError('PIN 碼錯誤，請重新輸入');
+            setTimeout(() => setPin(''), 1000);
+          }
+        }
+      };
+
+      return (
+        <div style={{position:'fixed', inset:0, background:'linear-gradient(135deg, #2c3e50, #1a1a1a)', zIndex:9999, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'#fff', fontFamily:'"Microsoft JhengHei", sans-serif'}}>
+          <img src={branding.logo} style={{width:'80px', height:'80px', borderRadius:'20px', marginBottom:'20px', boxShadow:'0 10px 30px rgba(0,0,0,0.5)'}} />
+          <h1 style={{marginBottom:'10px', fontSize:'32px', fontWeight:'900'}}>{branding.name}</h1>
+          <p style={{color:'rgba(255,255,255,0.6)', marginBottom:'40px', fontSize:'18px'}}>登入解鎖以開啟系統</p>
+          
+          <div style={{display:'flex', gap:'20px', marginBottom:'50px'}}>
+             {[0,1,2,3].map(i => (
+                <div key={i} style={{width:'24px', height:'24px', borderRadius:'50%', border:'2px solid #fff', background: pin.length > i ? '#fff' : 'transparent', transition:'all 0.2s', boxShadow: pin.length > i ? '0 0 15px #fff' : 'none'}}></div>
+             ))}
+          </div>
+
+          {error && <div style={{color:'#ff4757', marginBottom:'30px', fontWeight:'bold', animation:'shake 0.5s'}}>{error}</div>}
+
+          <div style={{display:'grid', gridTemplateColumns:'repeat(3, 90px)', gap:'25px'}}>
+             {[1,2,3,4,5,6,7,8,9].map(n => <button key={n} onClick={() => handleLogin(n.toString())} style={{width:'90px', height:'90px', borderRadius:'50%', border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.05)', color:'#fff', fontSize:'28px', cursor:'pointer', fontWeight:'bold', transition:'all 0.1s'}} onMouseDown={e=>e.target.style.transform='scale(0.9)'} onMouseUp={e=>e.target.style.transform='scale(1)'}>{n}</button>)}
+             <button onClick={() => setPin('')} style={{width:'90px', height:'90px', borderRadius:'50%', border:'none', background:'transparent', color:'#ff4757', fontSize:'20px', cursor:'pointer', fontWeight:'bold'}}>清除</button>
+             <button onClick={() => handleLogin('0')} style={{width:'90px', height:'90px', borderRadius:'50%', border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.05)', color:'#fff', fontSize:'28px', cursor:'pointer', fontWeight:'bold'}} onMouseDown={e=>e.target.style.transform='scale(0.9)'} onMouseUp={e=>e.target.style.transform='scale(1)'}>0</button>
+             <button onClick={() => handleLogin('del')} style={{width:'90px', height:'90px', borderRadius:'50%', border:'none', background:'transparent', color:'#eee', fontSize:'28px', cursor:'pointer'}}>←</button>
+          </div>
+          
+          <style>{`
+            @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-10px); } 40%, 80% { transform: translateX(10px); } }
+          `}</style>
         </div>
       );
     }
@@ -281,6 +323,21 @@
       const [adminModal, setAdminModal] = useState(null);
       const [chartTab, setChartTab] = useState('weekly');
       const [analysisItemName, setAnalysisItemName] = useState('all');
+      
+      const [staffList, setStaffList] = useState([]);
+      const [currentUser, setCurrentUser] = useState(() => {
+        try {
+          const saved = localStorage.getItem('pos_admin_session');
+          return saved ? JSON.parse(saved) : null;
+        } catch (e) { return null; }
+      });
+      const [editingStaff, setEditingStaff] = useState(null);
+      
+      const [rolePermissions, setRolePermissions] = useState({
+        admin: ['kds', 'menu', 'categories', 'dashboard', 'analytics', 'history', 'staff', 'settings'],
+        leader: ['kds', 'dashboard', 'analytics', 'history'],
+        cashier: [] // Generally means no admin access
+      });
       
       const lastOrderTimeRef = useRef("");
       const isInitialLoadRef = useRef(true);
@@ -319,6 +376,7 @@
         const unsubUIVisibility = window.POSDatabase.getUIVisibility(setUiVisibility);
         const unsubCategoryIcons = window.POSDatabase.getCategoryIcons(setCategoryIcons);
         const unsubBranding = window.POSDatabase.getBranding(setBranding);
+        const unsubStaff = window.POSDatabase.getStaff(setStaffList);
         return () => { 
           unsubCatOrder && unsubCatOrder(); 
           unsubItemOrders && unsubItemOrders();
@@ -326,6 +384,7 @@
           unsubUIVisibility && unsubUIVisibility();
           unsubCategoryIcons && unsubCategoryIcons();
           unsubBranding && unsubBranding();
+          unsubStaff && unsubStaff();
         };
       }, []);
 
@@ -525,13 +584,62 @@
         });
       };
 
+      const handleUpdateLogin = (user) => {
+        setCurrentUser(user);
+        if (user) {
+          localStorage.setItem('pos_admin_session', JSON.stringify(user));
+        } else {
+          localStorage.removeItem('pos_admin_session');
+        }
+      };
+
+      const handleLogout = () => {
+        showModal('確定要登出系統嗎？', 'warning', '登出確認', () => {
+          handleUpdateLogin(null);
+        });
+      };
+
+
+      const canSee = (tab) => {
+        if (!currentUser) return false;
+        const permitted = rolePermissions[currentUser.role] || [];
+        return permitted.includes(tab);
+      };
+
+      const handleSaveStaff = async (list) => {
+        try {
+          await window.POSDatabase.saveStaff(list);
+          showModal('人員權限儲存成功！');
+        } catch(e) { showModal('儲存失敗：' + e.message, 'error'); }
+      }
 
       return (
+        <React.Fragment>
+        {!currentUser && <LoginOverlay onLogin={handleUpdateLogin} staffList={staffList} branding={branding} />}
         <div className={`admin-layout ${isCollapsed ? 'collapsed' : ''}`}>
           <div className="side-nav">
             <div className="collapse-btn" onClick={() => setIsCollapsed(!isCollapsed)}>
               <span className="btn-icon">←</span>
             </div>
+            
+            {/* User Profile Info */}
+            {!isCollapsed && currentUser && (
+              <div style={{background:'rgba(52,152,219,0.05)', padding:'15px', borderRadius:'12px', marginBottom:'25px', display:'flex', alignItems:'center', gap:'12px', border:'1px solid rgba(52,152,219,0.1)'}}>
+                <div style={{width:'40px', height:'40px', background:'var(--primary-color)', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:'bold', fontSize:'20px'}}>
+                  {currentUser.name[0]}
+                </div>
+                <div style={{overflow:'hidden'}}>
+                  <div style={{fontSize:'16px', fontWeight:'bold', color:'#2c3e50', whiteSpace:'nowrap', textOverflow:'ellipsis'}}>{currentUser.name}</div>
+                  <div style={{fontSize:'12px', color:'#7f8c8d', background:'rgba(0,0,0,0.05)', display:'inline-block', padding:'2px 8px', borderRadius:'4px', marginTop:'2px'}}>{currentUser.title}</div>
+                </div>
+              </div>
+            )}
+            {isCollapsed && currentUser && (
+               <div style={{width:'40px', height:'40px', background:'var(--primary-color)', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:'bold', margin:'0 auto 25px', cursor:'help'}} title={`${currentUser.name} (${currentUser.title})`}>
+                 {currentUser.name[0]}
+               </div>
+            )}
+
             <div style={{ color: '#2f3640', fontSize: '20px', fontWeight:'bold', marginBottom:'30px', display:'flex', gap:'5px' }}>
               {isCollapsed ? (
                 <img src={branding.logo} style={{width:'40px', height:'40px', borderRadius:'8px', objectFit:'cover'}} />
@@ -542,53 +650,81 @@
                 </div>
               )}
             </div>
-            <div className={`nav-item ${activeTab === 'kds' ? 'active' : ''}`} onClick={() => setActiveTab('kds')}>
-              <span className="icon">👨‍🍳</span>
-              <span>廚房看板 ({pendingOrders.length})</span>
-            </div>
-            <div className={`nav-item ${activeTab === 'menu' ? 'active' : ''}`} onClick={() => setActiveTab('menu')}>
-              <span className="icon">📋</span>
-              <span>菜單管理</span>
-            </div>
-            <div className={`nav-item ${activeTab === 'categories' ? 'active' : ''}`} onClick={() => setActiveTab('categories')}>
-              <span className="icon">🔢</span>
-              <span>排序管理</span>
-            </div>
-            <div className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
-              <span className="icon">📊</span>
-              <span>今日概覽</span>
-            </div>
-            <div className={`nav-item ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>
-              <span className="icon">📈</span>
-              <span>營業分析</span>
-            </div>
-            <div className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
-              <span className="icon">🕒</span>
-              <span>出餐紀錄</span>
-            </div>
-            <div className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
-              <span className="icon">⚙️</span>
-              <span>系統設定</span>
-            </div>
-            <div style={{ marginTop: 'auto', paddingBottom: '10px' }}>
-              <a href="index.html" target="_blank" className="nav-item" style={{display: 'flex', textDecoration: 'none', color: '#ff4757', border: '1px solid #ffeaa7', overflow: 'visible', flexShrink: 0}}>
+            {canSee('kds') && (
+              <div className={`nav-item ${activeTab === 'kds' ? 'active' : ''}`} onClick={() => setActiveTab('kds')}>
+                <span className="icon">👨‍🍳</span>
+                <span>廚房看板 ({pendingOrders.length})</span>
+              </div>
+            )}
+            {canSee('menu') && (
+              <div className={`nav-item ${activeTab === 'menu' ? 'active' : ''}`} onClick={() => setActiveTab('menu')}>
+                <span className="icon">📋</span>
+                <span>菜單管理</span>
+              </div>
+            )}
+            {canSee('categories') && (
+              <div className={`nav-item ${activeTab === 'categories' ? 'active' : ''}`} onClick={() => setActiveTab('categories')}>
+                <span className="icon">🔢</span>
+                <span>排序管理</span>
+              </div>
+            )}
+            {canSee('dashboard') && (
+              <div className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
+                <span className="icon">📊</span>
+                <span>今日概覽</span>
+              </div>
+            )}
+            {canSee('analytics') && (
+              <div className={`nav-item ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>
+                <span className="icon">📈</span>
+                <span>營業分析</span>
+              </div>
+            )}
+            {canSee('history') && (
+              <div className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
+                <span className="icon">🕒</span>
+                <span>出餐紀錄</span>
+              </div>
+            )}
+            {canSee('staff') && (
+              <div className={`nav-item ${activeTab === 'staff' ? 'active' : ''}`} onClick={() => setActiveTab('staff')}>
+                <span className="icon">👥</span>
+                <span>人員權限</span>
+              </div>
+            )}
+            {canSee('settings') && (
+              <div className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
+                <span className="icon">⚙️</span>
+                <span>系統設定</span>
+              </div>
+            )}
+            
+            <div style={{ marginTop: 'auto', paddingBottom: '10px', display:'flex', flexDirection:'column', gap:'10px', width: '100%' }}>
+              <div onClick={handleLogout} className="nav-item" style={{color:'#ff4757', background: 'rgba(255,71,87,0.05)', border: '1px solid rgba(255,71,87,0.2)'}}>
+                 <span className="icon">🚪</span>
+                 <span>登出系統</span>
+              </div>
+              <a href="index.html" target="_blank" className="nav-item" style={{display: 'flex', textDecoration: 'none', color: '#e67e22', background: 'rgba(230,126,34,0.05)', border: '1px solid rgba(230,126,34,0.2)', flexShrink: 0}}>
                 <span className="icon">💰</span>
                 <span>返回前台</span>
               </a>
             </div>
           </div>
           <div className="kds-container">
-            {activeTab === 'kds' && (
-              <div style={{position:'absolute', top:'20px', right:'40px', display:'flex', gap:'10px', zIndex:10}}>
-                <button onClick={playOrderSound} style={{background:'#fff', border:'2px solid #3498db', padding:'10px 15px', borderRadius:'30px', cursor:'pointer', fontWeight:'bold', color:'#3498db', boxShadow:'0 4px 10px rgba(0,0,0,0.1)'}}>
-                  🔔 測試鈴聲
-                </button>
-                <div className={`sound-toggle ${isMuted ? 'muted' : ''}`} onClick={() => setIsMuted(!isMuted)} style={{position:'static'}}>
-                  <span style={{fontSize:'20px'}}>{isMuted ? '🔇' : '🔊'}</span>
-                  <span>{isMuted ? '提示音：靜音中' : '提示音：已開啟'}</span>
+            {/* Top Right Info Bar */}
+            <div style={{position:'absolute', top:'20px', right:'40px', display:'flex', alignItems:'center', gap:'20px', zIndex:10}}>
+              {activeTab === 'kds' && (
+                <div style={{display:'flex', gap:'10px'}}>
+                  <button onClick={playOrderSound} style={{background:'#fff', border:'2px solid #3498db', padding:'10px 15px', borderRadius:'30px', cursor:'pointer', fontWeight:'bold', color:'#3498db', boxShadow:'0 4px 10px rgba(0,0,0,0.1)'}}>
+                    🔔 測試鈴聲
+                  </button>
+                  <div className={`sound-toggle ${isMuted ? 'muted' : ''}`} onClick={() => setIsMuted(!isMuted)} style={{position:'static'}}>
+                    <span style={{fontSize:'20px'}}>{isMuted ? '🔇' : '🔊'}</span>
+                    <span>提示音：{isMuted ? '關閉' : '開啟'}</span>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
             {activeTab === 'kds' && (
               <div>
                 <h2>等待製作 ({pendingOrders.length})</h2>
@@ -1664,32 +1800,35 @@
                                      </span>
                                   </div>
                                   <div style={{fontSize:'28px', fontWeight:'900', color:'#2c3e50'}}>{itemStatsThisMonth.count} <span style={{fontSize:'14px', fontWeight:'normal', color:'#7f8c8d'}}>份</span></div>
-                                  <div style={{fontSize:'12px', color:'#95a5a6', marginTop:'5px'}}>上期 ({dateRangePrevMonth})：{itemStatsLastMonth.count} 份</div>
+                                  <div style={{fontSize:'12px', color:'#95a5a6', marginTop:'5px'}}>上月 ({dateRangePrevMonth})：{itemStatsLastMonth.count} 份</div>
                                </div>
                             </div>
-
-                            <div style={{display:'flex', alignItems:'flex-end', height:'260px', gap: chartTab === 'monthly' ? '4px' : '20px', paddingBottom:'25px', borderBottom:'2px solid #f1f2f6', marginBottom:'15px', overflowX:'auto'}}>
-                              {itemChartData.map((d, idx) => (
-                                <div key={idx} style={{flex:1, minWidth: chartTab === 'monthly' ? '12px' : '40px', display:'flex', flexDirection:'column', alignItems:'center', gap:'10px'}}>
-                                   <div style={{fontSize:'12px', color:'#27ae60', fontWeight:'bold'}}>{d.qty > 0 ? `${d.qty}份` : ''}</div>
-                                   <div style={{
-                                      width:'100%', 
-                                      height:`${(d.qty / maxItemQty) * 200}px`,
-                                      background:'linear-gradient(180deg, #2ecc71, #27ae60)',
-                                      borderRadius:'4px 4px 0 0',
-                                      transition:'height 0.8s ease-out',
-                                      opacity: d.qty === 0 ? 0.2 : 1
-                                   }}></div>
-                                </div>
-                              ))}
+                            
+                            {/* Item Trend Chart */}
+                            <div style={{display:'flex', alignItems:'flex-end', height:'180px', gap: chartTab === 'monthly' ? '2px' : '20px', paddingBottom:'25px', borderBottom:'2px solid #f1f2f6', marginBottom:'15px', overflowX:'auto'}}>
+                               {itemChartData.map((d, idxx) => {
+                                  const isCurrent = d.label === String(now.getDate()) || d.label === (now.getMonth() + 1 + '月') || d.label === now.toLocaleDateString('zh-TW', { weekday: 'short' });
+                                  return (
+                                   <div key={idxx} style={{flex:1, minWidth: chartTab === 'monthly' ? '12px' : '30px', display:'flex', flexDirection:'column', alignItems:'center', gap:'8px'}}>
+                                      <div style={{fontSize:'10px', color:'#27ae60', fontWeight:'bold'}}>{d.qty > 0 ? d.qty : ''}</div>
+                                      <div style={{
+                                         width:'100%', 
+                                         height:`${(d.qty / maxItemQty) * 120}px`,
+                                         background: isCurrent ? '#27ae60' : '#ecf0f1',
+                                         borderRadius:'4px 4px 0 0',
+                                         opacity: d.qty === 0 ? 0.3 : 1,
+                                         transition:'height 0.8s ease-out'
+                                      }}></div>
+                                   </div>
+                                  );
+                               })}
                             </div>
-                            <div style={{display:'flex', gap: chartTab === 'monthly' ? '4px' : '20px', overflowX:'auto'}}>
-                              {itemChartData.map((d, idx) => (
-                                 <div key={idx} style={{flex:1, minWidth: chartTab === 'monthly' ? '12px' : '40px', textAlign:'center'}}>
-                                   <div style={{fontSize: chartTab === 'monthly' ? '10px' : '14px', fontWeight:'bold', color: '#2c3e50'}}>{d.label}</div>
-                                   {d.sub && <div style={{fontSize:'10px', color:'#bdc3c7'}}>{d.sub}</div>}
-                                </div>
-                              ))}
+                            <div style={{display:'flex', gap: chartTab === 'monthly' ? '2px' : '20px', overflowX:'auto'}}>
+                               {itemChartData.map((d, idxx) => (
+                                 <div key={idxx} style={{flex:1, minWidth: chartTab === 'monthly' ? '12px' : '40px', textAlign:'center'}}>
+                                    <div style={{fontSize: chartTab === 'monthly' ? '10px' : '12px', fontWeight:'bold', color: '#2c3e50'}}>{d.label}</div>
+                                 </div>
+                               ))}
                             </div>
                           </>
                         )}
@@ -1697,7 +1836,99 @@
                   </div>
                 );
               })()}
-            
+
+            {activeTab === 'staff' && (
+               <div>
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'30px', borderBottom:'1px solid #eee', paddingBottom:'20px'}}>
+                     <div>
+                        <h2 style={{border:'none', margin:0, padding:0, fontSize:'28px', marginBottom:'5px'}}>👥 人員權限與登入管理</h2>
+                        <div style={{color:'#777'}}>設定店內員工清單、PIN 碼以及在系統中扮演的角色權限。</div>
+                     </div>
+                     <button onClick={() => setEditingStaff({ id: Date.now().toString(), name: '', title: '新員工', pin: '', role: 'cashier' })} style={{background:'var(--primary-color)', color:'#fff', border:'none', padding:'12px 25px', borderRadius:'10px', fontWeight:'bold', cursor:'pointer', display:'flex', alignItems:'center', gap:'8px'}}>
+                       ➕ 新增人員
+                     </button>
+                  </div>
+
+                  <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px, 1fr))', gap:'25px'}}>
+                     {staffList.map(s => (
+                        <div key={s.id} style={{background:'#fff', padding:'25px', borderRadius:'15px', border:'1px solid #eee', boxShadow:'0 4px 15px rgba(0,0,0,0.02)', position:'relative', transition:'transform 0.2s'}} onMouseOver={e=>e.currentTarget.style.transform='translateY(-5px)'} onMouseOut={e=>e.currentTarget.style.transform='translateY(0)'}>
+                           <div style={{display:'flex', alignItems:'center', gap:'15px', marginBottom:'20px'}}>
+                              <div style={{width:'50px', height:'50px', background: s.role==='admin' ? '#e74c3c' : (s.role==='leader' ? '#3498db' : '#2ecc71'), borderRadius:'12px', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:'bold', fontSize:'22px'}}>
+                                 {s.name[0]}
+                              </div>
+                              <div>
+                                 <div style={{fontSize:'20px', fontWeight:'bold', color:'#2c3e50'}}>{s.name}</div>
+                                 <div style={{fontSize:'14px', color:'#7f8c8d'}}>{s.title} ({s.role.toUpperCase()})</div>
+                              </div>
+                           </div>
+                           <div style={{background:'#f8f9fa', padding:'15px', borderRadius:'10px', fontSize:'15px', marginBottom:'20px'}}>
+                              <div style={{display:'flex', justifyContent:'space-between', marginBottom:'8px'}}>
+                                 <span style={{color:'#7f8c8d'}}>登入 PIN 碼：</span>
+                                 <span style={{fontWeight:'bold', letterSpacing:'2px'}}>{s.pin}</span>
+                              </div>
+                              <div style={{display:'flex', justifyContent:'space-between'}}>
+                                 <span style={{color:'#7f8c8d'}}>存取權限：</span>
+                                 <span style={{color:'#27ae60', fontWeight:'bold'}}>{rolePermissions[s.role]?.length || 0} 個頁面</span>
+                              </div>
+                           </div>
+                           <div style={{display:'flex', gap:'10px'}}>
+                              <button onClick={() => setEditingStaff(s)} style={{flex:1, padding:'10px', background:'#fff', border:'1px solid #ddd', borderRadius:'8px', cursor:'pointer', fontWeight:'bold', color:'#555'}}>編輯</button>
+                              {s.id !== currentUser?.id && (
+                                <button onClick={() => {
+                                   showModal(`確定要刪除 ${s.name} 嗎？此動作無法復原。`, 'warning', '人員刪除', () => {
+                                      handleSaveStaff(staffList.filter(it => it.id !== s.id));
+                                   });
+                                }} style={{padding:'10px 15px', background:'#fff', border:'1px solid #ff4757', borderRadius:'8px', cursor:'pointer', color:'#ff4757'}}>刪除</button>
+                              )}
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+
+                  {editingStaff && (
+                    <div style={{position:'fixed', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:10001}}>
+                       <div style={{background:'#fff', padding:'40px', borderRadius:'20px', width:'90%', maxWidth:'450px', boxShadow:'0 15px 35px rgba(0,0,0,0.2)'}}>
+                          <h2 style={{marginTop:0, border:'none', padding:0, marginBottom:'25px'}}>人員資料設定</h2>
+                          <div style={{marginBottom:'20px'}}>
+                             <label className="input-label">員工姓名</label>
+                             <input type="text" className="input-field" value={editingStaff.name} onChange={e=>setEditingStaff({...editingStaff, name: e.target.value})} placeholder="例如：李小明" />
+                          </div>
+                          <div style={{marginBottom:'20px'}}>
+                             <label className="input-label">職稱顯示</label>
+                             <input type="text" className="input-field" value={editingStaff.title} onChange={e=>setEditingStaff({...editingStaff, title: e.target.value})} placeholder="例如：晚班組長" />
+                          </div>
+                          <div style={{marginBottom:'20px'}}>
+                             <label className="input-label">登入 PIN 碼 (4 位數)</label>
+                             <input type="text" maxLength="4" className="input-field" value={editingStaff.pin} onChange={e=>setEditingStaff({...editingStaff, pin: e.target.value.replace(/\D/g,'')})} placeholder="例如：1234" />
+                          </div>
+                          <div style={{marginBottom:'30px'}}>
+                             <label className="input-label">系統權限角色</label>
+                             <select className="input-field" value={editingStaff.role} onChange={e=>setEditingStaff({...editingStaff, role: e.target.value})}>
+                                <option value="admin">管理員 (Admin) - 全部功能</option>
+                                <option value="leader">組長 (Leader) - 看板/統計/歷史</option>
+                                <option value="cashier">收銀員 (Cashier) - 僅限前台</option>
+                             </select>
+                          </div>
+                          <div style={{display:'flex', gap:'15px'}}>
+                             <button onClick={() => setEditingStaff(null)} style={{flex:1, padding:'15px', background:'#eee', border:'none', borderRadius:'10px', cursor:'pointer', fontWeight:'bold'}}>取消</button>
+                             <button onClick={() => {
+                                if (!editingStaff.name || editingStaff.pin.length !== 4) {
+                                   showModal('請輸入完整的姓名與 4 位數 PIN 碼', 'error', '資料不全');
+                                   return;
+                                }
+                                const newList = staffList.find(s => s.id === editingStaff.id) 
+                                   ? staffList.map(s => s.id === editingStaff.id ? editingStaff : s)
+                                   : [...staffList, editingStaff];
+                                handleSaveStaff(newList);
+                                setEditingStaff(null);
+                             }} style={{flex:1, padding:'15px', background:'var(--primary-color)', color:'#fff', border:'none', borderRadius:'10px', cursor:'pointer', fontWeight:'bold'}}>儲存設定</button>
+                          </div>
+                       </div>
+                    </div>
+                  )}
+               </div>
+            )}
+
             {activeTab === 'settings' && (
               <div>
                 <h1 style={{marginBottom:'20px'}}>系統設定 ⚙️</h1>
@@ -1717,14 +1948,14 @@
                          <h2 style={{margin:0}}>KDS 廚房看板預警時間</h2>
                       </div>
                       <div style={{marginBottom:'20px'}}>
-                        <label className="input-label">🟡 警告時間門檻 (分鐘)</label>
-                        <input type="number" className="input-field" value={kdsSettings.yellow} onChange={e => setKdsSettings({...kdsSettings, yellow: parseInt(e.target.value)})} />
-                        <p style={{color:'#777', fontSize:'14px', marginTop:'8px'}}>當等待時間超過此數值，訂單標題將變為黃色。</p>
+                         <label className="input-label">🟡 警告時間門檻 (分鐘)</label>
+                         <input type="number" className="input-field" value={kdsSettings.yellow} onChange={e => setKdsSettings({...kdsSettings, yellow: parseInt(e.target.value)})} />
+                         <p style={{color:'#777', fontSize:'14px', marginTop:'8px'}}>當等待時間超過此數值，訂單標題將變為黃色。</p>
                       </div>
                       <div style={{marginBottom:'30px'}}>
-                        <label className="input-label">🔴 緊急時間門檻 (分鐘)</label>
-                        <input type="number" className="input-field" value={kdsSettings.red} onChange={e => setKdsSettings({...kdsSettings, red: parseInt(e.target.value)})} />
-                        <p style={{color:'#777', fontSize:'14px', marginTop:'8px'}}>當等待時間超過此數值，訂單標題將變為紅色。</p>
+                         <label className="input-label">🔴 緊急時間門檻 (分鐘)</label>
+                         <input type="number" className="input-field" value={kdsSettings.red} onChange={e => setKdsSettings({...kdsSettings, red: parseInt(e.target.value)})} />
+                         <p style={{color:'#777', fontSize:'14px', marginTop:'8px'}}>當等待時間超過此數值，訂單標題將變為紅色。</p>
                       </div>
                       <button onClick={async () => {
                          try {
@@ -1934,6 +2165,7 @@
           )}
 
         </div>
+        </React.Fragment>
       );
     }
     const root = ReactDOM.createRoot(document.getElementById('root'));
