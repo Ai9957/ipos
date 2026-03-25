@@ -10,6 +10,7 @@
   <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script>
     window.POSDatabase = (function() {
       const firebaseConfig = { apiKey: "AIzaSyDTsrdVcwm7mi2aGoexNG4QqcEyn6JFqpw", authDomain: "project-a60e1765-a61e-40db-82e.firebaseapp.com", projectId: "project-a60e1765-a61e-40db-82e" };
@@ -495,6 +496,33 @@
         }
       };
 
+      const exportDailyReport = () => {
+        const element = document.getElementById('daily-report-content');
+        if (!element) return;
+        
+        const now = new Date();
+        const yy = String(now.getFullYear()).substring(2);
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const filename = `${yy}${mm}${dd}Daily.pdf`;
+
+        const opt = {
+          margin: 10,
+          filename: filename,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        showModal('報表生成中，請稍候...', 'info', '報表匯出');
+        // Assuming html2pdf.js is loaded globally
+        html2pdf().set(opt).from(element).save().then(() => {
+          setAdminModal(null); // Close the "報表生成中" modal
+        }).catch(err => {
+          showModal('報表生成失敗: ' + err.message, 'error', '匯出錯誤');
+        });
+      };
+
 
       return (
         <div className={`admin-layout ${isCollapsed ? 'collapsed' : ''}`}>
@@ -857,10 +885,18 @@
                const totalTypeCount = Object.values(typeStats).reduce((a,b)=>a+b, 0) || 1;
 
                return (
-                 <div style={{animation:'fadeIn 0.3s ease-out'}}>
+                 <div id="daily-report-content" style={{animation:'fadeIn 0.3s ease-out', background:'#f1f2f6', padding:'20px', borderRadius:'20px'}}>
                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', paddingBottom:'15px', marginBottom:'25px', flexWrap:'wrap', gap:'15px'}}>
                      <div>
-                       <h2 style={{borderBottom:'none', paddingBottom:0, marginBottom:'10px', fontSize:'28px'}}>📊 營運分析看板 (Sales Analytics)</h2>
+                       <div style={{display:'flex', alignItems:'center', gap:'15px'}}>
+                         <h2 style={{borderBottom:'none', paddingBottom:0, marginBottom:'5px', fontSize:'28px'}}>📊 營運分析看板 (Sales Analytics)</h2>
+                         <button 
+                           onClick={exportDailyReport}
+                           style={{padding:'8px 20px', background:'#27ae60', color:'#fff', border:'none', borderRadius:'30px', fontWeight:'bold', cursor:'pointer', display:'flex', alignItems:'center', gap:'8px', boxShadow:'0 4px 10px rgba(39,174,96,0.2)'}}
+                         >
+                           📄 下載今日營運報表 (PDF)
+                         </button>
+                       </div>
                        <div style={{color:'#777'}}>即時交叉分析總覽，全面掌握您的店舖營運狀況。</div>
                      </div>
                      <div style={{display:'flex', alignItems:'center', gap:'10px', background:'#fff', padding:'10px 25px', borderRadius:'30px', border:'2px solid #3498db', boxShadow:'0 4px 10px rgba(52,152,219,0.1)'}}>
@@ -1092,7 +1128,7 @@
                     </div>
                   </div>
                 );
-            })()}
+              })()}
             
             {activeTab === 'settings' && (
               <div>
