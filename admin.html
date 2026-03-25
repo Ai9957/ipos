@@ -59,6 +59,12 @@
       const saveUIVisibility = async (settings) => {
         if (dbMode === 'firebase') await dbInstance.collection('settings').doc('ui_visibility').set(settings);
       };
+      const getCategoryIcons = (callback) => {
+        if (dbMode === 'firebase') return dbInstance.collection('settings').doc('category_icons').onSnapshot((s) => callback(s.exists ? s.data() : {}));
+      };
+      const saveCategoryIcons = async (icons) => {
+        if (dbMode === 'firebase') await dbInstance.collection('settings').doc('category_icons').set(icons);
+      };
       const saveMenuItem = async (item) => {
         const data = { ...item }; let id = data.id; delete data.id;
         if (dbMode === 'firebase') { if(id) await dbInstance.collection('menu_items').doc(String(id)).update(data); else await dbInstance.collection('menu_items').add(data); }
@@ -71,8 +77,10 @@
         saveOrder, updateOrderStatus, subscribeToOrders, getMenu, 
         getCategoryOrder, saveCategoryOrder, getItemOrders, saveItemOrders, 
         getKDSSettings, saveKDSSettings, getUIVisibility, saveUIVisibility, 
+        getCategoryIcons, saveCategoryIcons,
         saveMenuItem, deleteMenuItem, importDefaultMenu 
       };
+
     })();
   </script>
   <style>
@@ -144,6 +152,12 @@
   <div id="root"></div>
   <script type="text/babel">
     const { useState, useEffect, useMemo, useRef } = React;
+    const PRESET_EMOJIS = [
+      '🍛', '🍜', '🍲', '🍗', '🍔', '🍟', '🍱', '🍕', '🥘', '🥟', '🥗', '🥪', '🥣', '🍞', '🍝', '🍣', '🍢', '🌯', '🌮', '🥩', '🥓', '🍳', '🥞', '🥨', '🥐',
+      '🍰', '🍦', '🍩', '🍪', '🍮', '🥧', '🍫', '🍯',
+      '🥤', '☕', '🍺', '🍸', '🍹', '🍷', '🍶', '🍼',
+      '🍽️', '🍴'
+    ];
     const defaultMenuData = [
       { id: 1, name: '經典牛肉堡', price: 120, category: 'burger', image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=200&h=200', hasOptions: false },
       { id: 2, name: '雙層起司堡', price: 150, category: 'burger', image: 'https://images.unsplash.com/photo-1586816001966-79b736744398?auto=format&fit=crop&q=80&w=200&h=200', hasOptions: false },
@@ -232,6 +246,8 @@
       const [uiVisibility, setUiVisibility] = useState({ types: ['內用', '外帶', '外送'], payments: ['現金', '信用卡', 'LINE Pay'] });
       const [isMuted, setIsMuted] = useState(false);
       const [isCollapsed, setIsCollapsed] = useState(false);
+      const [settingsSubTab, setSettingsSubTab] = useState('kds'); // kds, visibility, icons
+      const [categoryIcons, setCategoryIcons] = useState({});
       
       const lastOrderTimeRef = useRef("");
       const isInitialLoadRef = useRef(true);
@@ -249,13 +265,16 @@
         const unsubItemOrders = window.POSDatabase.getItemOrders(setItemOrders);
         const unsubKDSSettings = window.POSDatabase.getKDSSettings(setKdsSettings);
         const unsubUIVisibility = window.POSDatabase.getUIVisibility(setUiVisibility);
+        const unsubCategoryIcons = window.POSDatabase.getCategoryIcons(setCategoryIcons);
         return () => { 
           unsub && unsub(); 
-          unsubItemOrders && unsubItemOrders(); 
+          unsubItemOrders && unsubItemOrders();
           unsubKDSSettings && unsubKDSSettings();
           unsubUIVisibility && unsubUIVisibility();
+          unsubCategoryIcons && unsubCategoryIcons();
         };
       }, []);
+
 
       const computedCategories = useMemo(() => {
         return Array.from(new Set(menuItems.map(item => categoryLabelMap[item.category] || item.category).filter(Boolean)));
@@ -352,15 +371,6 @@
          setOriginalItem(null);
       };
 
-      const handleSaveKDSSettings = async () => {
-          try {
-             await window.POSDatabase.saveKDSSettings(kdsSettings);
-             alert('KDS 預警時間儲存成功！');
-          } catch(e) {
-             alert('儲存失敗：' + e.message);
-          }
-      };
-
       const handleToggleVisibility = async (category, value) => {
           const newSettings = { ...uiVisibility };
           if (newSettings[category].includes(value)) {
@@ -368,7 +378,6 @@
           } else {
               newSettings[category] = [...newSettings[category], value];
           }
-          // Default protection: ensure at least one type/payment is selected
           if (newSettings[category].length === 0) {
               alert('警告：至少必須保留一個選項呈現，否則前台無法進行結帳流程。');
               return;
@@ -378,6 +387,16 @@
              await window.POSDatabase.saveUIVisibility(newSettings);
           } catch(e) { console.error("Save Visibility Error:", e); }
       };
+
+      const handleSaveCategoryIcons = async () => {
+          try {
+              await window.POSDatabase.saveCategoryIcons(categoryIcons);
+              alert('分類圖示儲存成功！');
+          } catch(e) {
+              alert('儲存失敗：' + e.message);
+          }
+      };
+
 
       return (
         <div className={`admin-layout ${isCollapsed ? 'collapsed' : ''}`}>
@@ -714,65 +733,120 @@
                 </div>
               </div>
             )}
+            
             {activeTab === 'settings' && (
               <div>
-                <h2>系統設定 ⚙️</h2>
-                <div style={{background:'#fff', padding:'30px', borderRadius:'12px', maxWidth:'600px'}}>
-                   <h3 style={{marginBottom:'20px', borderBottom:'1px solid #eee', paddingBottom:'10px'}}>KDS 廚房看板預警時間</h3>
-                   <div style={{marginBottom:'25px'}}>
-                      <label className="input-label">🟡 警告時間門檻 (分鐘)</label>
-                      <input 
-                        type="number" 
-                        className="input-field" 
-                        value={kdsSettings.yellow} 
-                        onChange={e => setKdsSettings({...kdsSettings, yellow: Number(e.target.value)})} 
-                      />
-                      <p style={{fontSize:'13px', color:'#777', marginTop:'5px'}}>當等待時間超過此數值，訂單標題將變為黃色。</p>
-                   </div>
-                   <div style={{marginBottom:'30px'}}>
-                      <label className="input-label">🔴 緊急時間門檻 (分鐘)</label>
-                      <input 
-                        type="number" 
-                        className="input-field" 
-                        value={kdsSettings.red} 
-                        onChange={e => setKdsSettings({...kdsSettings, red: Number(e.target.value)})} 
-                      />
-                      <p style={{fontSize:'13px', color:'#777', marginTop:'5px'}}>當等待時間超過此數值，訂單標題將變為紅色。</p>
-                   </div>
-                   <button 
-                     className="btn-done" 
-                     style={{background: 'var(--primary-color)', width:'200px'}} 
-                     onClick={handleSaveKDSSettings}
-                   >
-                     儲存設定
-                   </button>
+                <h1 style={{marginBottom:'20px'}}>系統設定 ⚙️</h1>
+                
+                <div style={{display:'flex', gap:'20px', borderBottom:'2px solid #ddd', marginBottom:'30px', overflowX:'auto'}}>
+                  <div onClick={() => setSettingsSubTab('kds')} style={{padding:'10px 20px', cursor:'pointer', fontWeight:'bold', borderBottom: settingsSubTab === 'kds' ? '4px solid var(--primary-color)' : 'none', color: settingsSubTab === 'kds' ? 'var(--primary-color)' : '#666', whiteSpace:'nowrap'}}>KDS 預警時間</div>
+                  <div onClick={() => setSettingsSubTab('visibility')} style={{padding:'10px 20px', cursor:'pointer', fontWeight:'bold', borderBottom: settingsSubTab === 'visibility' ? '4px solid var(--primary-color)' : 'none', color: settingsSubTab === 'visibility' ? 'var(--primary-color)' : '#666', whiteSpace:'nowrap'}}>結帳介面控制</div>
+                  <div onClick={() => setSettingsSubTab('icons')} style={{padding:'10px 20px', cursor:'pointer', fontWeight:'bold', borderBottom: settingsSubTab === 'icons' ? '4px solid var(--primary-color)' : 'none', color: settingsSubTab === 'icons' ? 'var(--primary-color)' : '#666', whiteSpace:'nowrap'}}>分類圖示管理</div>
+                </div>
 
-                   <h3 style={{marginTop:'40px', marginBottom:'20px', borderBottom:'1px solid #eee', paddingBottom:'10px'}}>結帳介面顯示設定</h3>
-                   <div style={{marginBottom:'20px'}}>
-                      <label className="input-label">顯示點餐類型</label>
-                      <div style={{display:'flex', gap:'15px', background:'#f8f9fa', padding:'15px', borderRadius:'10px'}}>
-                         {['內用', '外帶', '外送'].map(t => (
-                           <label key={t} style={{display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontWeight:'bold'}}>
-                             <input type="checkbox" style={{width:'20px', height:'20px'}} checked={uiVisibility.types.includes(t)} onChange={() => handleToggleVisibility('types', t)} />
-                             {t}
-                           </label>
+                <div style={{background:'#fff', padding:'40px', borderRadius:'15px', maxWidth:'800px', boxShadow:'0 4px 15px rgba(0,0,0,0.05)'}}>
+                  {settingsSubTab === 'kds' && (
+                    <div className="settings-section">
+                      <div className="section-header" style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'25px'}}>
+                         <div style={{width:'4px', height:'24px', background:'var(--primary-color)', borderRadius:'2px'}}></div>
+                         <h2 style={{margin:0}}>KDS 廚房看板預警時間</h2>
+                      </div>
+                      <div style={{marginBottom:'20px'}}>
+                        <label className="input-label">🟡 警告時間門檻 (分鐘)</label>
+                        <input type="number" className="input-field" value={kdsSettings.yellow} onChange={e => setKdsSettings({...kdsSettings, yellow: parseInt(e.target.value)})} />
+                        <p style={{color:'#777', fontSize:'14px', marginTop:'8px'}}>當等待時間超過此數值，訂單標題將變為黃色。</p>
+                      </div>
+                      <div style={{marginBottom:'30px'}}>
+                        <label className="input-label">🔴 緊急時間門檻 (分鐘)</label>
+                        <input type="number" className="input-field" value={kdsSettings.red} onChange={e => setKdsSettings({...kdsSettings, red: parseInt(e.target.value)})} />
+                        <p style={{color:'#777', fontSize:'14px', marginTop:'8px'}}>當等待時間超過此數值，訂單標題將變為紅色。</p>
+                      </div>
+                      <button onClick={async () => {
+                         try {
+                           await window.POSDatabase.saveKDSSettings(kdsSettings);
+                           alert('KDS 預警時間儲存成功！');
+                         } catch(e) { alert('儲存失敗：' + e.message); }
+                      }} className="btn-done" style={{background: 'var(--primary-color)', width:'100%'}}>儲存 KDS 設定</button>
+                    </div>
+                  )}
+
+                  {settingsSubTab === 'visibility' && (
+                    <div className="settings-section">
+                      <div className="section-header" style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'25px'}}>
+                         <div style={{width:'4px', height:'24px', background:'var(--primary-color)', borderRadius:'2px'}}></div>
+                         <h2 style={{margin:0}}>結帳介面顯示設定</h2>
+                      </div>
+                      <p style={{color:'#777', marginBottom:'25px'}}>切換前台點餐系統中對應欄位是否顯示，若停用則該選項不會出現在點餐流程中。</p>
+                      
+                      <div style={{marginBottom:'30px'}}>
+                         <h3 style={{marginBottom:'15px', fontSize:'18px'}}>🍕 點餐類型 (Order Types)</h3>
+                         <div style={{display:'flex', gap:'15px', flexWrap:'wrap'}}>
+                            {['內用', '外帶', '外送'].map(type => (
+                               <label key={type} style={{display:'flex', alignItems:'center', gap:'10px', background: uiVisibility.types.includes(type) ? 'rgba(76,209,55,0.1)' : '#f8f9fa', padding:'10px 20px', borderRadius:'30px', border: uiVisibility.types.includes(type) ? '2px solid #4cd137' : '2px solid #ddd', cursor:'pointer', transition:'all 0.2s'}}>
+                                  <input type="checkbox" style={{display:'none'}} checked={uiVisibility.types.includes(type)} onChange={() => handleToggleVisibility('types', type)} />
+                                  <span style={{fontSize:'18px'}}>{type === '內用' ? '🏠' : type === '外帶' ? '🛍️' : '🚲'} {type}</span>
+                                  <span style={{color: uiVisibility.types.includes(type) ? '#4cd137' : '#999', fontSize:'14px'}}>{uiVisibility.types.includes(type) ? '✅ 已啟用' : '❌ 已停用'}</span>
+                               </label>
+                            ))}
+                         </div>
+                      </div>
+
+                      <div style={{marginBottom:'10px'}}>
+                         <h3 style={{marginBottom:'15px', fontSize:'18px'}}>💳 支付方式 (Payment Methods)</h3>
+                         <div style={{display:'flex', gap:'15px', flexWrap:'wrap'}}>
+                            {['現金', '信用卡', 'LINE Pay'].map(pm => (
+                               <label key={pm} style={{display:'flex', alignItems:'center', gap:'10px', background: uiVisibility.payments.includes(pm) ? 'rgba(52,152,219,0.1)' : '#f8f9fa', padding:'10px 20px', borderRadius:'30px', border: uiVisibility.payments.includes(pm) ? '2px solid #3498db' : '2px solid #ddd', cursor:'pointer', transition:'all 0.2s'}}>
+                                  <input type="checkbox" style={{display:'none'}} checked={uiVisibility.payments.includes(pm)} onChange={() => handleToggleVisibility('payments', pm)} />
+                                  <span style={{fontSize:'18px'}}>{pm === '現金' ? '💵' : pm === '信用卡' ? '💳' : '📱'} {pm}</span>
+                                  <span style={{color: pm === '現金' || pm === '信用卡' || pm === 'LINE Pay' ? (uiVisibility.payments.includes(pm) ? '#3498db' : '#999') : '#999', fontSize:'14px'}}>{uiVisibility.payments.includes(pm) ? '✅ 已啟用' : '❌ 已停用'}</span>
+                               </label>
+                            ))}
+                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {settingsSubTab === 'icons' && (
+                    <div className="settings-section">
+                      <div className="section-header" style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'25px'}}>
+                         <div style={{width:'4px', height:'24px', background:'var(--primary-color)', borderRadius:'2px'}}></div>
+                         <h2 style={{margin:0}}>分類選單圖示管理 (Emojis)</h2>
+                      </div>
+                      <p style={{color:'#777', marginBottom:'25px'}}>為您的餐點分類設定專屬圖示，若未設定則前台將顯示預設圖示 🍽️。</p>
+                      
+                      <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(180px, 1fr))', gap:'20px', marginBottom:'30px'}}>
+                         {computedCategories.map(cat => (
+                            <div key={cat} style={{background:'#f8f9fa', padding:'20px', borderRadius:'15px', border:'1px solid #eee', display:'flex', flexDirection:'column', alignItems:'center'}}>
+                               <div style={{fontWeight:'bold', marginBottom:'15px', fontSize:'16px', color:'#333'}}>{cat}</div>
+                               <div style={{display:'flex', gap:'10px', alignItems:'center', marginBottom:'15px'}}>
+                                  <input 
+                                    type="text" 
+                                    placeholder="輸入" 
+                                    value={categoryIcons[cat] || ''} 
+                                    onChange={e => setCategoryIcons({...categoryIcons, [cat]: e.target.value})} 
+                                    style={{width:'70px', padding:'5px', borderRadius:'10px', border:'2px solid var(--primary-color)', textAlign:'center', fontSize:'28px', background:'#fff'}} 
+                                  />
+                               </div>
+                               <div style={{display:'flex', flexWrap:'wrap', gap:'5px', justifyContent:'center', padding:'10px', background:'#fff', borderRadius:'10px', border:'1px solid #eee'}}>
+                                  {PRESET_EMOJIS.map(emoji => (
+                                     <span 
+                                       key={emoji} 
+                                       onClick={() => setCategoryIcons({...categoryIcons, [cat]: emoji})}
+                                       style={{fontSize:'20px', cursor:'pointer', padding:'5px', borderRadius:'5px', transition:'transform 0.1s'}}
+                                       onMouseOver={e => e.currentTarget.style.transform = 'scale(1.3)'}
+                                       onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
+                                     >
+                                        {emoji}
+                                     </span>
+                                  ))}
+                               </div>
+                            </div>
                          ))}
                       </div>
-                      <p style={{fontSize:'12px', color:'#777', marginTop:'5px'}}>勾選後才會出現在前台結帳視窗的類別按鈕。</p>
-                   </div>
-                   
-                   <div style={{marginBottom:'20px'}}>
-                      <label className="input-label">顯示支付方式</label>
-                      <div style={{display:'flex', gap:'15px', background:'#f8f9fa', padding:'15px', borderRadius:'10px'}}>
-                         {['現金', '信用卡', 'LINE Pay'].map(p => (
-                           <label key={p} style={{display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontWeight:'bold'}}>
-                             <input type="checkbox" style={{width:'20px', height:'20px'}} checked={uiVisibility.payments.includes(p)} onChange={() => handleToggleVisibility('payments', p)} />
-                             {p}
-                           </label>
-                         ))}
-                      </div>
-                      <p style={{fontSize:'12px', color:'#777', marginTop:'5px'}}>控制前台顯示哪些付款工具。</p>
-                   </div>
+
+                      <button onClick={handleSaveCategoryIcons} className="btn-done" style={{background: 'var(--primary-color)', width:'100%'}}>儲存圖示設定</button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

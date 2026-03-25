@@ -36,7 +36,10 @@
           payments: ['現金', '信用卡', 'LINE Pay'] 
         }));
       };
-      return { saveOrder, getMenu, getCategoryOrder, getItemOrders, getUIVisibility };
+      const getCategoryIcons = (callback) => {
+        if (dbMode === 'firebase') return dbInstance.collection('settings').doc('category_icons').onSnapshot((s) => callback(s.exists ? s.data() : {}));
+      };
+      return { saveOrder, getMenu, getCategoryOrder, getItemOrders, getUIVisibility, getCategoryIcons };
     })();
   </script>
 </head>
@@ -66,14 +69,17 @@
       const [isProcessing, setIsProcessing] = useState(false);
       const [isCollapsed, setIsCollapsed] = useState(false);
       const [isCartCollapsed, setIsCartCollapsed] = useState(false);
+      const [categoryIcons, setCategoryIcons] = useState({});
 
       useEffect(() => {
         const unsubMenu = window.POSDatabase.getMenu(setMenuItems);
         const unsubCat = window.POSDatabase.getCategoryOrder(setCategoryOrder);
         const unsubItemOrders = window.POSDatabase.getItemOrders(setItemOrders);
         const unsubUIVisibility = window.POSDatabase.getUIVisibility(setUiVisibility);
-        return () => { unsubMenu(); unsubCat(); unsubItemOrders(); unsubUIVisibility(); };
+        const unsubIcons = window.POSDatabase.getCategoryIcons(setCategoryIcons);
+        return () => { unsubMenu(); unsubCat(); unsubItemOrders(); unsubUIVisibility(); unsubIcons(); };
       }, []);
+
 
       useEffect(() => {
         if (!uiVisibility.types.includes(orderType) && uiVisibility.types.length > 0) {
@@ -85,7 +91,10 @@
       }, [uiVisibility]);
 
       const categoryLabelMap = { burger: '漢堡', snack: '點心', drink: '飲料', combo: '套餐' };
-      const categoryIconMap = { '漢堡': '🍔', '點心': '🍟', '飲料': '🥤', '套餐': '🍱', '全部': '🏠' };
+      const categoryIconMap = useMemo(() => {
+        return { '漢堡': '🍔', '點心': '🍟', '飲料': '🥤', '套餐': '🍱', '全部': '🏠', ...categoryIcons };
+      }, [categoryIcons]);
+
       const categories = useMemo(() => {
         const cats = Array.from(new Set(menuItems.map(item => categoryLabelMap[item.category] || item.category).filter(Boolean)));
         const finalCats = ['全部', ...cats].sort((a, b) => {
