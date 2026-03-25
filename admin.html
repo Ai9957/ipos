@@ -1179,37 +1179,36 @@
                   return Math.round(((curr - prev) / prev) * 100);
                 };
 
-                // 1. Daily Comparison
-                const statsToday = getPeriodStats(today, today + 86400000);
-                const statsYesterday = getPeriodStats(yesterday, today);
+                // Date Ranges (Local Midnight)
+                const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+                const startOfYesterday = startOfToday - 86400000;
+                
+                const week1Start = startOfToday - (6 * 86400000);
+                const week2Start = week1Start - (7 * 86400000);
+                const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+                const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
+                const yearStart = new Date(now.getFullYear(), 0, 1).getTime();
+
+                // Revenue Comparison Stats (Fixed Periods)
+                const statsToday = getPeriodStats(startOfToday, startOfToday + 86400000);
+                const statsYesterday = getPeriodStats(startOfYesterday, startOfToday);
                 const growthDaily = getGrowth(statsToday.revenue, statsYesterday.revenue);
 
-                // 2. Weekly Comparison (Last 7 days vs Prior 7 days)
-                const week1Start = today - (6 * 86400000);
-                const week2Start = week1Start - (7 * 86400000);
-                const statsThisWeek = getPeriodStats(week1Start, today + 86400000);
+                const statsThisWeek = getPeriodStats(week1Start, startOfToday + 86400000);
                 const statsLastWeek = getPeriodStats(week2Start, week1Start);
                 const growthWeekly = getGrowth(statsThisWeek.revenue, statsLastWeek.revenue);
 
-                // 3. Monthly Comparison
-                const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-                const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
-                const statsThisMonth = getPeriodStats(monthStart, today + 86400000);
+                const statsThisMonth = getPeriodStats(monthStart, startOfToday + 86400000);
                 const statsLastMonth = getPeriodStats(lastMonthStart, monthStart);
                 const growthMonthly = getGrowth(statsThisMonth.revenue, statsLastMonth.revenue);
 
-                // Date Formatting Helpers
+                // Formatting
                 const fmtDate = (ts) => {
                   const d = new Date(ts);
                   return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
                 };
-                const fmtMonth = (ts) => {
-                  const d = new Date(ts);
-                  return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`;
-                };
-
-                const dateRangeToday = fmtDate(today);
-                const dateRangeYest = fmtDate(yesterday);
+                const dateRangeToday = fmtDate(startOfToday);
+                const dateRangeYest = fmtDate(startOfYesterday);
                 const dateRangeWeek = `${fmtDate(week1Start)} ~ ${fmtDate(now)}`;
                 const dateRangePrevWeek = `${fmtDate(week2Start)} ~ ${fmtDate(week1Start - 1)}`;
                 const dateRangeMonth = `${fmtDate(monthStart)} ~ ${fmtDate(now)}`;
@@ -1217,34 +1216,64 @@
 
                 // Chart Data Aggregation
                 let chartData = [];
+                let periodStartTS = 0;
+                let periodEndTS = startOfToday + 86400000;
+
                 if (chartTab === 'weekly') {
+                  periodStartTS = week1Start;
                   for(let i=6; i>=0; i--) {
-                    const d = new Date(today - i * 86400000);
+                    const d = new Date(startOfToday - i * 86400000);
                     const stats = getPeriodStats(d.getTime(), d.getTime() + 86400000);
-                    chartData.push({ label: d.toLocaleDateString('zh-TW', { weekday: 'short' }), revenue: stats.revenue, sub: d.toLocaleDateString('zh-TW', { month: '2-digit', day: '2-digit' }) });
+                    chartData.push({ 
+                      label: d.toLocaleDateString('zh-TW', { weekday: 'short' }), 
+                      revenue: stats.revenue, 
+                      count: stats.count, 
+                      sub: d.toLocaleDateString('zh-TW', { month: '2-digit', day: '2-digit' }) 
+                    });
                   }
                 } else if (chartTab === 'monthly') {
+                  periodStartTS = monthStart;
                   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
                   for(let i=1; i<=daysInMonth; i++) {
                     const d = new Date(now.getFullYear(), now.getMonth(), i);
                     const stats = getPeriodStats(d.getTime(), d.getTime() + 86400000);
-                    chartData.push({ label: `${i}日`, revenue: stats.revenue, sub: '' });
+                    chartData.push({ label: `${i}`, revenue: stats.revenue, count: stats.count, sub: '' });
                   }
                 } else if (chartTab === 'yearly') {
+                  periodStartTS = yearStart;
                   for(let m=0; m<12; m++) {
                     const start = new Date(now.getFullYear(), m, 1).getTime();
                     const end = new Date(now.getFullYear(), m + 1, 1).getTime();
                     const stats = getPeriodStats(start, end);
-                    chartData.push({ label: `${m+1}月`, revenue: stats.revenue, sub: '' });
+                    chartData.push({ label: `${m+1}月`, revenue: stats.revenue, count: stats.count, sub: '' });
                   }
                 }
+
                 const maxChartRev = Math.max(...chartData.map(d => d.revenue), 1);
+                const maxChartCount = Math.max(...chartData.map(d => d.count), 1);
+
+                // Breakdown Stats for SELECTED PERIOD (Synchronized)
+                const periodOrders = orders.filter(o => {
+                  const d = o.createdAt ? new Date(o.createdAt).getTime() : 0;
+                  return o.status === 'completed' && d >= periodStartTS && d < periodEndTS;
+                });
                 
-                // Item Specific Data aggregation
+                const periodTotalRevenue = periodOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+                const periodAOV = periodOrders.length ? Math.round(periodTotalRevenue / periodOrders.length) : 0;
+                
+                const periodPaymentStats = {};
+                periodOrders.forEach(o => { if(o.paymentMethod) periodPaymentStats[o.paymentMethod] = (periodPaymentStats[o.paymentMethod] || 0) + o.totalAmount; });
+                const totalPeriodPaid = Object.values(periodPaymentStats).reduce((a,b)=>a+b, 0) || 1;
+                
+                const periodTypeStats = {};
+                periodOrders.forEach(o => { if(o.orderType) periodTypeStats[o.orderType] = (periodTypeStats[o.orderType] || 0) + 1; });
+                const totalPeriodTypeCount = Object.values(periodTypeStats).reduce((a,b)=>a+b, 0) || 1;
+
+                // Item Specific Data aggregation (Ensure synchronization)
                 let itemChartData = [];
                 if (chartTab === 'weekly') {
                   for(let i=6; i>=0; i--) {
-                    const d = new Date(today - i * 86400000);
+                    const d = new Date(startOfToday - i * 86400000);
                     const stats = getPeriodStats(d.getTime(), d.getTime() + 86400000, analysisItemName);
                     itemChartData.push({ 
                       label: d.toLocaleDateString('zh-TW', { weekday: 'short' }), 
@@ -1257,7 +1286,7 @@
                   for(let i=1; i<=daysInMonth; i++) {
                     const d = new Date(now.getFullYear(), now.getMonth(), i);
                     const stats = getPeriodStats(d.getTime(), d.getTime() + 86400000, analysisItemName);
-                    itemChartData.push({ label: `${i}日`, qty: stats.count });
+                    itemChartData.push({ label: `${i}`, qty: stats.count });
                   }
                 } else if (chartTab === 'yearly') {
                   for(let m=0; m<12; m++) {
@@ -1269,16 +1298,16 @@
                 }
                 const maxItemQty = Math.max(...itemChartData.map(d => d.qty), 1);
 
-                // --- Item Comparison Stats ---
-                const itemStatsToday = getPeriodStats(today, today + 86400000, analysisItemName);
-                const itemStatsYesterday = getPeriodStats(yesterday, today, analysisItemName);
+                // --- Item Comparison Stats (Fixed Periods) ---
+                const itemStatsToday = getPeriodStats(startOfToday, startOfToday + 86400000, analysisItemName);
+                const itemStatsYesterday = getPeriodStats(startOfYesterday, startOfToday, analysisItemName);
                 const itemGrowthDaily = getGrowth(itemStatsToday.count, itemStatsYesterday.count);
 
-                const itemStatsThisWeek = getPeriodStats(week1Start, today + 86400000, analysisItemName);
+                const itemStatsThisWeek = getPeriodStats(week1Start, startOfToday + 86400000, analysisItemName);
                 const itemStatsLastWeek = getPeriodStats(week2Start, week1Start, analysisItemName);
                 const itemGrowthWeekly = getGrowth(itemStatsThisWeek.count, itemStatsLastWeek.count);
 
-                const itemStatsThisMonth = getPeriodStats(monthStart, today + 86400000, analysisItemName);
+                const itemStatsThisMonth = getPeriodStats(monthStart, startOfToday + 86400000, analysisItemName);
                 const itemStatsLastMonth = getPeriodStats(lastMonthStart, monthStart, analysisItemName);
                 const itemGrowthMonthly = getGrowth(itemStatsThisMonth.count, itemStatsLastMonth.count);
 
@@ -1423,10 +1452,91 @@
                               <div style={{display:'flex', gap:'15px', marginTop:'20px', padding:'20px', background:'rgba(255,255,255,0.05)', borderRadius:'12px'}}>
                                  <div style={{fontSize:'16px'}}>
                                     <div style={{fontWeight:'bold', marginBottom:'10px', color:'#f1c40f'}}>戰略提醒：</div>
-                                    目前 AOV 為 <strong style={{fontSize:'20px'}}>${todayOrders.length ? Math.round(todayTotal/todayOrders.length) : 0}</strong>。
+                                    目前 {chartTab === 'weekly' ? '本週' : chartTab === 'monthly' ? '本月' : '本年'} AOV 為 <strong style={{fontSize:'20px'}}>${periodAOV}</strong>。
                                     嘗試引導客人搭配套餐銷售，目標將客單價提升 10% 以最大化坪效。
                                  </div>
                               </div>
+                           </div>
+                        </div>
+                    </div>
+
+                    {/* New Trends & Breakdown Grid */}
+                    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(400px, 1fr))', gap:'30px', marginTop:'30px'}}>
+                        {/* Order Count Trend Chart */}
+                        <div style={{background:'#fff', padding:'35px', borderRadius:'20px', boxShadow:'0 10px 30px rgba(0,0,0,0.05)'}}>
+                            <h3 style={{margin:0, color:'#2c3e50', fontSize:'22px', border:'none', padding:0, marginBottom:'30px'}}>📊 訂單數量趨勢 ({chartTab === 'weekly' ? '週' : chartTab === 'monthly' ? '月' : '年'})</h3>
+                            <div style={{display:'flex', alignItems:'flex-end', height:'180px', gap: chartTab === 'monthly' ? '2px' : '20px', paddingBottom:'25px', borderBottom:'2px solid #f1f2f6', marginBottom:'15px', overflowX:'auto'}}>
+                              {chartData.map((d, idxx) => {
+                                 const isCurrent = d.label === String(now.getDate()) || d.label === (now.getMonth() + 1 + '月') || d.label === now.toLocaleDateString('zh-TW', { weekday: 'short' });
+                                 return (
+                                  <div key={idxx} style={{flex:1, minWidth: chartTab === 'monthly' ? '12px' : '30px', display:'flex', flexDirection:'column', alignItems:'center', gap:'8px'}}>
+                                     <div style={{fontSize:'10px', color:'#3498db', fontWeight:'bold'}}>{d.count > 0 ? d.count : ''}</div>
+                                     <div style={{
+                                        width:'100%', 
+                                        height:`${(d.count / maxChartCount) * 120}px`,
+                                        background: isCurrent ? '#3498db' : '#ecf0f1',
+                                        borderRadius:'4px 4px 0 0',
+                                        opacity: d.count === 0 ? 0.3 : 1,
+                                        transition:'height 0.8s ease-out'
+                                     }}></div>
+                                  </div>
+                                 );
+                              })}
+                            </div>
+                            <div style={{display:'flex', gap: chartTab === 'monthly' ? '2px' : '20px', overflowX:'auto'}}>
+                              {chartData.map((d, idxx) => (
+                                <div key={idxx} style={{flex:1, minWidth: chartTab === 'monthly' ? '12px' : '40px', textAlign:'center'}}>
+                                   <div style={{fontSize: chartTab === 'monthly' ? '10px' : '12px', fontWeight:'bold', color: '#2c3e50'}}>{d.label}</div>
+                                </div>
+                              ))}
+                            </div>
+                        </div>
+
+                        {/* Payment & Order Type Distribution */}
+                        <div style={{display:'flex', flexDirection:'column', gap:'30px'}}>
+                           <div style={{background:'#fff', padding:'30px', borderRadius:'15px', border:'1px solid #eee', boxShadow:'0 4px 20px rgba(0,0,0,0.02)'}}>
+                              <h3 style={{marginBottom:'25px', fontSize:'22px', display:'flex', alignItems:'center', gap:'10px'}}>💳 期間支付方式 {chartTab === 'weekly' ? '(週)' : chartTab === 'monthly' ? '(月)' : '(年)'}</h3>
+                              {Object.keys(periodPaymentStats).length === 0 ? <div style={{color:'#999', textAlign:'center', padding:'30px 0'}}>該期間尚無支付資料</div> : (
+                                <div style={{display:'flex', flexDirection:'column', gap:'20px'}}>
+                                  {Object.entries(periodPaymentStats).sort((a,b)=>b[1]-a[1]).map(([pm, revv]) => {
+                                     const pct = Math.round((revv / totalPeriodPaid) * 100);
+                                     const color = pm === '現金' ? '#e67e22' : pm === 'LINE Pay' ? '#2ecc71' : '#3498db';
+                                     return (
+                                        <div key={pm}>
+                                          <div style={{display:'flex', justifyContent:'space-between', marginBottom:'8px', fontSize:'16px'}}>
+                                            <span style={{fontWeight:'bold', color:'#2f3640'}}>{pm} <span style={{color, background:`${color}20`, padding:'3px 10px', borderRadius:'20px', fontSize:'13px', marginLeft:'8px'}}>{pct}%</span></span>
+                                            <span style={{color:'#555', fontWeight:'bold'}}>${revv.toLocaleString()}</span>
+                                          </div>
+                                          <div style={{height:'12px', background:'#f0f2f5', borderRadius:'6px', overflow:'hidden'}}>
+                                            <div style={{width: `${pct}%`, height:'100%', background:color, borderRadius:'6px'}}></div>
+                                          </div>
+                                        </div>
+                                     );
+                                  })}
+                                </div>
+                              )}
+                           </div>
+                           <div style={{background:'#fff', padding:'30px', borderRadius:'15px', border:'1px solid #eee', boxShadow:'0 4px 20px rgba(0,0,0,0.02)'}}>
+                              <h3 style={{marginBottom:'25px', fontSize:'22px', display:'flex', alignItems:'center', gap:'10px'}}>🛵 期間訂單類型 {chartTab === 'weekly' ? '(週)' : chartTab === 'monthly' ? '(月)' : '(年)'}</h3>
+                              {Object.keys(periodTypeStats).length === 0 ? <div style={{color:'#999', textAlign:'center', padding:'30px 0'}}>該期間尚無訂單類型資料</div> : (
+                                 <div style={{display:'flex', flexDirection:'column', gap:'20px'}}>
+                                   {Object.entries(periodTypeStats).map(([t, countt]) => {
+                                      const color = t === '內用' ? '#1abc9c' : t === '外帶' ? '#f39c12' : '#9b59b6';
+                                      const pct = Math.round((countt / totalPeriodTypeCount) * 100);
+                                      return (
+                                        <div key={t}>
+                                          <div style={{display:'flex', justifyContent:'space-between', marginBottom:'8px', fontSize:'16px'}}>
+                                            <span style={{fontWeight:'bold', color:'#2f3640'}}>{t} <span style={{color, background:`${color}20`, padding:'3px 10px', borderRadius:'20px', fontSize:'13px', marginLeft:'8px'}}>{pct}%</span></span>
+                                            <span style={{color:'#7f8fa6'}}>{countt}筆</span>
+                                          </div>
+                                          <div style={{height:'12px', background:'#f0f2f5', borderRadius:'6px', overflow:'hidden'}}>
+                                            <div style={{width: `${pct}%`, height:'100%', background:color, borderRadius:'6px'}}></div>
+                                          </div>
+                                        </div>
+                                      );
+                                   })}
+                                 </div>
+                              )}
                            </div>
                         </div>
                     </div>
