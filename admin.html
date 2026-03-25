@@ -261,6 +261,14 @@
 
       const isDirty = originalItem && editingItem && originalItem !== JSON.stringify(editingItem);
 
+      const handleCancelEdit = () => {
+         if (isDirty) {
+            if (!confirm('您有未儲存的變動，確定要返回嗎？製作的修改將會消失。')) return;
+         }
+         setEditingItem(null);
+         setOriginalItem(null);
+      };
+
       const handleSaveKDSSettings = async () => {
           try {
              await window.POSDatabase.saveKDSSettings(kdsSettings);
@@ -309,45 +317,47 @@
             )}
             {activeTab === 'menu' && (
               <div>
-                <div style={{display:'flex', justifyContent:'space-between', borderBottom:'2px solid #eee', paddingBottom:'15px', marginBottom:'20px', alignItems:'center'}}>
-                   <h2 style={{border:'none', margin:0}}>菜單管理系統</h2>
-                   <button onClick={() => {
-                      const it = {name:'', price:0, category:'', image:'', hasOptions:false, customOptions:''};
-                      setEditingItem(it);
-                      setOriginalItem(JSON.stringify(it));
-                   }} style={{padding: '10px 20px', background: 'var(--primary-color)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold'}}>＋ 新增餐點</button>
-                </div>
-                
-                <div style={{display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', background: '#fff', padding: '15px', borderRadius: '12px'}}>
-                  <button 
-                    onClick={() => setFilterCategory('all')} 
-                    style={{padding: '8px 16px', borderRadius: '20px', border: '1px solid #ddd', background: filterCategory === 'all' ? 'var(--primary-color)' : '#f8f9fa', color: filterCategory === 'all' ? '#fff' : '#555', cursor: 'pointer', fontWeight: 'bold'}}
-                  >
-                    全部 ({menuItems.length})
-                  </button>
-                  {locallySortedCategories.map(cat => {
-                    const count = menuItems.filter(item => (categoryLabelMap[item.category] || item.category) === cat).length;
-                    return (
+                {!editingItem ? (
+                  <>
+                    <div style={{display:'flex', justifyContent:'space-between', borderBottom:'2px solid #eee', paddingBottom:'15px', marginBottom:'20px', alignItems:'center'}}>
+                      <h2 style={{border:'none', margin:0}}>菜單管理系統</h2>
+                      <button onClick={() => {
+                          const it = {name:'', price:0, category:'', image:'', hasOptions:false, customOptions:''};
+                          setEditingItem(it);
+                          setOriginalItem(JSON.stringify(it));
+                      }} style={{padding: '10px 20px', background: 'var(--primary-color)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold'}}>＋ 新增餐點</button>
+                    </div>
+                    
+                    <div style={{display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', background: '#fff', padding: '15px', borderRadius: '12px'}}>
                       <button 
-                        key={cat}
-                        onClick={() => setFilterCategory(cat)} 
-                        style={{padding: '8px 16px', borderRadius: '20px', border: '1px solid #ddd', background: filterCategory === cat ? 'var(--primary-color)' : '#f8f9fa', color: filterCategory === cat ? '#fff' : '#555', cursor: 'pointer', fontWeight: 'bold'}}
+                        onClick={() => setFilterCategory('all')} 
+                        style={{padding: '8px 16px', borderRadius: '20px', border: '1px solid #ddd', background: filterCategory === 'all' ? 'var(--primary-color)' : '#f8f9fa', color: filterCategory === 'all' ? '#fff' : '#555', cursor: 'pointer', fontWeight: 'bold'}}
                       >
-                        {cat} ({count})
+                        全部 ({menuItems.length})
                       </button>
-                    );
-                  })}
-                </div>
-
-                {menuItems.length === 0 && !editingItem && (
-                   <div style={{padding:'50px', textAlign:'center', background:'#fff', borderRadius:'12px'}}>
-                     <h3 style={{color:'#777'}}>目前資料庫中沒有任何餐點</h3>
-                     <button onClick={() => window.POSDatabase.importDefaultMenu(defaultMenuData)} style={{marginTop:'15px', padding:'15px 30px', background:'#4cd137', color:'#fff', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'18px'}}>一鍵匯入預設菜單範例</button>
-                   </div>
+                      {locallySortedCategories.map(cat => {
+                        const count = menuItems.filter(item => (categoryLabelMap[item.category] || item.category) === cat).length;
+                        return (
+                          <button 
+                            key={cat}
+                            onClick={() => setFilterCategory(cat)} 
+                            style={{padding: '8px 16px', borderRadius: '20px', border: '1px solid #ddd', background: filterCategory === cat ? 'var(--primary-color)' : '#f8f9fa', color: filterCategory === cat ? '#fff' : '#555', cursor: 'pointer', fontWeight: 'bold'}}
+                          >
+                            {cat} ({count})
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{display:'flex', justifyContent:'space-between', borderBottom:'2px solid #eee', paddingBottom:'15px', marginBottom:'20px', alignItems:'center'}}>
+                    <h2 style={{border:'none', margin:0}}>{editingItem.id ? '編輯餐點' : '新增餐點'}</h2>
+                    <button onClick={handleCancelEdit} style={{padding: '10px 20px', background: '#f1f2f6', color: '#555', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display:'flex', alignItems:'center', gap:'8px'}}>⬅️ 返回列表</button>
+                  </div>
                 )}
+
                 {editingItem ? (
                    <div style={{background:'#fff', padding:'30px', borderRadius:'12px', maxWidth:'600px', margin:'0 auto'}}>
-                     <h3>{editingItem.id ? '編輯餐點' : '新增餐點'}</h3>
                      <div>
                         <div style={{marginBottom:'15px'}}>
                            <label className="input-label">餐點名稱</label>
@@ -398,16 +408,22 @@
                            >
                              儲存
                            </button>
-                           <button type="button" onClick={()=>{setEditingItem(null); setOriginalItem(null);}} style={{flex:1, background:'#ddd', cursor:'pointer', border:'none', borderRadius:'8px', fontWeight:'bold'}}>取消</button>
+                           <button type="button" onClick={handleCancelEdit} style={{flex:1, background:'#ddd', cursor:'pointer', border:'none', borderRadius:'8px', fontWeight:'bold'}}>取消</button>
                         </div>
                      </div>
                    </div>
                 ) : (
                    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(350px, 1fr))', gap:'20px'}}>
+                     {menuItems.length === 0 && (
+                        <div style={{gridColumn:'1 / -1', padding:'50px', textAlign:'center', background:'#fff', borderRadius:'12px'}}>
+                          <h3 style={{color:'#777'}}>目前資料庫中沒有任何餐點</h3>
+                          <button onClick={() => window.POSDatabase.importDefaultMenu(defaultMenuData)} style={{marginTop:'15px', padding:'15px 30px', background:'#4cd137', color:'#fff', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'18px'}}>一鍵匯入預設菜單範例</button>
+                        </div>
+                     )}
                      {menuItems
                        .filter(item => filterCategory === 'all' || (categoryLabelMap[item.category] || item.category) === filterCategory)
                        .map(item => (
-                        <div key={item.id} style={{background:'#fff', borderRadius:'12px', padding:'15px', display:'flex', gap:'15px', alignItems:'center'}}>
+                        <div key={item.id} style={{background:'#fff', borderRadius:'12px', padding:'15px', display:'flex', gap:'15px', alignItems:'center', border:'1px solid #eee'}}>
                            <img src={item.image} style={{width:'80px', height:'80px', objectFit:'cover', borderRadius:'8px'}} />
                            <div style={{flex:1}}>
                               <div style={{fontWeight:'bold', fontSize:'20px'}}>{item.name}</div>
@@ -419,8 +435,8 @@
                                  const it = {...item, category: categoryLabelMap[item.category] || item.category};
                                  setEditingItem(it);
                                  setOriginalItem(JSON.stringify(it));
-                              }} style={{padding:'8px 15px', background:'#f1f2f6', border:'none', borderRadius:'6px', cursor:'pointer'}}>編輯</button>
-                              <button onClick={()=>{if(confirm('確定刪除？')) window.POSDatabase.deleteMenuItem(item.id)}} style={{padding:'8px 15px', background:'#ff6b81', color:'#fff', border:'none', borderRadius:'6px', cursor:'pointer'}}>刪除</button>
+                              }} style={{padding:'8px 15px', background:'#f1f2f6', border:'none', borderRadius:'6px', cursor:'pointer', fontWeight:'bold'}}>編輯</button>
+                              <button onClick={()=>{if(confirm('確定刪除？')) window.POSDatabase.deleteMenuItem(item.id)}} style={{padding:'8px 15px', background:'#ff6b81', color:'#fff', border:'none', borderRadius:'6px', cursor:'pointer', fontWeight:'bold'}}>刪除</button>
                            </div>
                         </div>
                      ))}
