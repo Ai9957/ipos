@@ -44,6 +44,12 @@
       const saveItemOrders = async (ordersObj) => {
         if (dbMode === 'firebase') await dbInstance.collection('settings').doc('item_orders').set(ordersObj);
       };
+      const getKDSSettings = (callback) => {
+        if (dbMode === 'firebase') return dbInstance.collection('settings').doc('kds_settings').onSnapshot((s) => callback(s.exists ? s.data() : { yellow: 5, red: 10 }));
+      };
+      const saveKDSSettings = async (settings) => {
+        if (dbMode === 'firebase') await dbInstance.collection('settings').doc('kds_settings').set(settings);
+      };
       const saveMenuItem = async (item) => {
         const data = { ...item }; let id = data.id; delete data.id;
         if (dbMode === 'firebase') { if(id) await dbInstance.collection('menu_items').doc(String(id)).update(data); else await dbInstance.collection('menu_items').add(data); }
@@ -52,7 +58,7 @@
       const importDefaultMenu = async (defaultItems) => {
         if (dbMode === 'firebase') { const batch = dbInstance.batch(); defaultItems.forEach(item => batch.set(dbInstance.collection('menu_items').doc(item.id.toString()), item)); await batch.commit(); }
       };
-      return { saveOrder, updateOrderStatus, subscribeToOrders, getMenu, getCategoryOrder, saveCategoryOrder, getItemOrders, saveItemOrders, saveMenuItem, deleteMenuItem, importDefaultMenu };
+      return { saveOrder, updateOrderStatus, subscribeToOrders, getMenu, getCategoryOrder, saveCategoryOrder, getItemOrders, saveItemOrders, getKDSSettings, saveKDSSettings, saveMenuItem, deleteMenuItem, importDefaultMenu };
     })();
   </script>
   <style>
@@ -93,9 +99,12 @@
       { id: 7, name: '經典套餐', price: 200, category: 'combo', image: 'https://images.unsplash.com/photo-1610614819515-6899ba89e5fc?auto=format&fit=crop&q=80&w=200&h=200', hasOptions: false }
     ];
 
-    function OrderCard({ order, onComplete, getOrderNo }) {
+    function OrderCard({ order, onComplete, getOrderNo, kdsSettings }) {
       const { useState, useEffect } = React;
       const [elapsed, setElapsed] = useState(0);
+
+      const yellowThreshold = kdsSettings?.yellow || 5;
+      const redThreshold = kdsSettings?.red || 10;
 
       useEffect(() => {
         const calc = () => {
@@ -107,9 +116,9 @@
         return () => clearInterval(tid);
       }, [order.createdAt]);
 
-      let color = '#2ed573'; // < 5: green
-      if (elapsed >= 10) color = '#ff4757'; // > 10: red
-      else if (elapsed >= 5) color = '#ffa502'; // 5-10: yellow
+      let color = '#2ed573'; // default green
+      if (elapsed >= redThreshold) color = '#ff4757'; // urgent: red
+      else if (elapsed >= yellowThreshold) color = '#ffa502'; // warning: yellow
 
       return (
         <div className="order-card" style={{ border: `2px solid ${color}` }}>
@@ -146,11 +155,17 @@
       const [filterCategory, setFilterCategory] = useState('all');
       const [itemOrders, setItemOrders] = useState({});
       const [selectedSortCategory, setSelectedSortCategory] = useState('');
+      const [kdsSettings, setKdsSettings] = useState({ yellow: 5, red: 10 });
 
       useEffect(() => {
         const unsub = window.POSDatabase.getCategoryOrder(setCategoryOrder);
         const unsubItemOrders = window.POSDatabase.getItemOrders(setItemOrders);
-        return () => { unsub && unsub(); unsubItemOrders && unsubItemOrders(); };
+        const unsubKDSSettings = window.POSDatabase.getKDSSettings(setKdsSettings);
+        return () => { 
+          unsub && unsub(); 
+          unsubItemOrders && unsubItemOrders(); 
+          unsubKDSSettings && unsubKDSSettings();
+        };
       }, []);
 
       const computedCategories = useMemo(() => {
@@ -219,6 +234,15 @@
         }
       };
 
+      const handleSaveKDSSettings = async () => {
+          try {
+             await window.POSDatabase.saveKDSSettings(kdsSettings);
+             alert('KDS 預警時間儲存成功！');
+          } catch(e) {
+             alert('儲存失敗：' + e.message);
+          }
+      };
+
       return (
         <div className="admin-layout">
           <div className="side-nav" style={{width: '250px', background:'#fff', padding:'20px', display:'flex', flexDirection:'column'}}>
@@ -228,6 +252,7 @@
             <div className={`nav-item ${activeTab === 'categories' ? 'active' : ''}`} onClick={() => setActiveTab('categories')}>排序管理</div>
             <div className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>今日營業額</div>
             <div className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>出餐紀錄</div>
+            <div className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>系統設定 ⚙️</div>
             <div style={{ marginTop: 'auto' }}>
               <a href="index.html" target="_blank" className="nav-item" style={{display: 'block', textDecoration: 'none', color: '#ff4757', border: '1px solid #ffeaa7'}}>返回前台 🍔</a>
             </div>
@@ -242,6 +267,7 @@
                       key={order.id} 
                       order={order} 
                       getOrderNo={getOrderNo} 
+                      kdsSettings={kdsSettings}
                       onComplete={(id) => window.POSDatabase.updateOrderStatus(id, 'completed')} 
                     />
                   ))}
@@ -483,6 +509,41 @@
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            )}
+            {activeTab === 'settings' && (
+              <div>
+                <h2>系統設定 ⚙️</h2>
+                <div style={{background:'#fff', padding:'30px', borderRadius:'12px', maxWidth:'600px'}}>
+                   <h3 style={{marginBottom:'20px', borderBottom:'1px solid #eee', paddingBottom:'10px'}}>KDS 廚房看板預警時間</h3>
+                   <div style={{marginBottom:'25px'}}>
+                      <label className="input-label">🟡 警告時間門檻 (分鐘)</label>
+                      <input 
+                        type="number" 
+                        className="input-field" 
+                        value={kdsSettings.yellow} 
+                        onChange={e => setKdsSettings({...kdsSettings, yellow: Number(e.target.value)})} 
+                      />
+                      <p style={{fontSize:'13px', color:'#777', marginTop:'5px'}}>當等待時間超過此數值，訂單標題將變為黃色。</p>
+                   </div>
+                   <div style={{marginBottom:'30px'}}>
+                      <label className="input-label">🔴 緊急時間門檻 (分鐘)</label>
+                      <input 
+                        type="number" 
+                        className="input-field" 
+                        value={kdsSettings.red} 
+                        onChange={e => setKdsSettings({...kdsSettings, red: Number(e.target.value)})} 
+                      />
+                      <p style={{fontSize:'13px', color:'#777', marginTop:'5px'}}>當等待時間超過此數值，訂單標題將變為紅色。</p>
+                   </div>
+                   <button 
+                     className="btn-done" 
+                     style={{background: 'var(--primary-color)', width:'200px'}} 
+                     onClick={handleSaveKDSSettings}
+                   >
+                     儲存設定
+                   </button>
                 </div>
               </div>
             )}

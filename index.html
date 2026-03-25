@@ -44,6 +44,12 @@
       const saveItemOrders = async (ordersObj) => {
         if (dbMode === 'firebase') await dbInstance.collection('settings').doc('item_orders').set(ordersObj);
       };
+      const getKDSSettings = (callback) => {
+        if (dbMode === 'firebase') return dbInstance.collection('settings').doc('kds_settings').onSnapshot((s) => callback(s.exists ? s.data() : { yellow: 5, red: 10 }));
+      };
+      const saveKDSSettings = async (settings) => {
+        if (dbMode === 'firebase') await dbInstance.collection('settings').doc('kds_settings').set(settings);
+      };
       const saveMenuItem = async (item) => {
         const data = { ...item }; let id = data.id; delete data.id;
         if (dbMode === 'firebase') { if(id) await dbInstance.collection('menu_items').doc(String(id)).update(data); else await dbInstance.collection('menu_items').add(data); }
@@ -52,7 +58,7 @@
       const importDefaultMenu = async (defaultItems) => {
         if (dbMode === 'firebase') { const batch = dbInstance.batch(); defaultItems.forEach(item => batch.set(dbInstance.collection('menu_items').doc(item.id.toString()), item)); await batch.commit(); }
       };
-      return { saveOrder, updateOrderStatus, subscribeToOrders, getMenu, getCategoryOrder, saveCategoryOrder, getItemOrders, saveItemOrders, saveMenuItem, deleteMenuItem, importDefaultMenu };
+      return { saveOrder, updateOrderStatus, subscribeToOrders, getMenu, getCategoryOrder, saveCategoryOrder, getItemOrders, saveItemOrders, getKDSSettings, saveKDSSettings, saveMenuItem, deleteMenuItem, importDefaultMenu };
     })();
   </script>
 </head>
