@@ -107,7 +107,8 @@
       border-left: none;
     }
     .collapse-btn:hover { background: var(--primary-color); }
-    .admin-layout.collapsed .collapse-btn { transform: translateY(-50%) rotate(180deg); }
+    .btn-icon { transition: transform 0.3s; display: flex; align-items: center; justify-content: center; }
+    .admin-layout.collapsed .btn-icon { transform: rotate(180deg); }
     .admin-layout.collapsed .logo-text { display: none; }
     .order-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
     .order-card { background: #fff; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); overflow: hidden; display: flex; flex-direction: column; transition: transform 0.2s; }
@@ -382,7 +383,7 @@
         <div className={`admin-layout ${isCollapsed ? 'collapsed' : ''}`}>
           <div className="side-nav">
             <div className="collapse-btn" onClick={() => setIsCollapsed(!isCollapsed)}>
-              ←
+              <span className="btn-icon">←</span>
             </div>
             <div style={{ color: '#2f3640', fontSize: '20px', fontWeight:'bold', marginBottom:'30px', display:'flex', gap:'5px' }}>
                <span>⚙️</span>

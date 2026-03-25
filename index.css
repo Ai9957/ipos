@@ -82,14 +82,21 @@ body {
   background: var(--primary-color);
 }
 
-.pos-layout.collapsed .collapse-btn {
-  transform: translateY(-50%) rotate(180deg);
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s;
+}
+
+.pos-layout.collapsed .collapse-btn .btn-icon {
+  transform: rotate(180deg);
 }
 
 .cart-collapse-btn {
   position: absolute;
-  top: 50%;
-  left: -24px;
+  top: 30px;
+  right: var(--sidebar-w);
   width: 24px;
   height: 60px;
   background: #2f3640;
@@ -100,8 +107,7 @@ body {
   justify-content: center;
   cursor: pointer;
   z-index: 1000;
-  transform: translateY(-50%);
-  transition: background 0.2s, left 0.3s;
+  transition: background 0.2s, right 0.3s;
   font-size: 12px;
   border: 1px solid rgba(255,255,255,0.1);
   border-right: none;
@@ -112,8 +118,15 @@ body {
 }
 
 .pos-layout.cart-collapsed .cart-collapse-btn {
-  transform: translateY(-50%) rotate(180deg);
+  right: 0;
 }
+
+.pos-layout.cart-collapsed .cart-collapse-btn .btn-icon {
+  transform: rotate(180deg);
+}
+
+
+
 
 .logo {
   font-size: 24px;
@@ -252,7 +265,6 @@ body {
 .pos-layout.cart-collapsed .cart-sidebar {
   width: 0;
   border-left: none;
-  overflow: visible;
 }
 
 .cart-content {

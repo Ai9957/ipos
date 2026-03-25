@@ -162,7 +162,7 @@
         <div className={`pos-layout ${isCollapsed ? 'collapsed' : ''} ${isCartCollapsed ? 'cart-collapsed' : ''}`}>
           <div className="side-nav">
             <div className="collapse-btn" onClick={() => setIsCollapsed(!isCollapsed)}>
-               ←
+              <span className="btn-icon">←</span>
             </div>
             <div className="logo">{isCollapsed ? '🍟' : '🍟 德上POS'}</div>
             {categories.map(cat => (
@@ -201,9 +201,6 @@
           </div>
 
           <div className="cart-sidebar">
-            <div className="cart-collapse-btn" onClick={() => setIsCartCollapsed(!isCartCollapsed)}>
-              →
-            </div>
             <div className="cart-content">
               <div className="cart-header">
                 <h3 style={{margin:0}}>🛒 購物車</h3>
@@ -238,6 +235,10 @@
                 <button className="checkout-btn" disabled={cart.length === 0} onClick={() => setShowCheckout(true)}>結帳送出</button>
               </div>
             </div>
+          </div>
+
+          <div className="cart-collapse-btn" onClick={() => setIsCartCollapsed(!isCartCollapsed)}>
+            <span className="btn-icon">→</span>
           </div>
 
           {showOptionsModal && (
