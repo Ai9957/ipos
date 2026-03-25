@@ -60,12 +60,12 @@ body {
 .collapse-btn {
   position: absolute;
   top: 50%;
-  right: -24px;
+  right: 0;
   width: 24px;
   height: 60px;
   background: #2f3640;
   color: #fff;
-  border-radius: 0 10px 10px 0;
+  border-radius: 10px 0 0 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -75,7 +75,7 @@ body {
   transition: background 0.2s, right 0.3s;
   font-size: 12px;
   border: 1px solid rgba(255,255,255,0.1);
-  border-left: none;
+  border-right: none;
 }
 
 .collapse-btn:hover {
@@ -89,12 +89,12 @@ body {
 .cart-collapse-btn {
   position: absolute;
   top: 50%;
-  left: -24px;
+  left: 0;
   width: 24px;
   height: 60px;
   background: #2f3640;
   color: #fff;
-  border-radius: 10px 0 0 10px;
+  border-radius: 0 10px 10px 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -104,7 +104,7 @@ body {
   transition: background 0.2s, left 0.3s;
   font-size: 12px;
   border: 1px solid rgba(255,255,255,0.1);
-  border-right: none;
+  border-left: none;
 }
 
 .cart-collapse-btn:hover {
@@ -251,8 +251,20 @@ body {
 
 .pos-layout.cart-collapsed .cart-sidebar {
   width: 0;
-  overflow: hidden;
   border-left: none;
+}
+
+.cart-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: opacity 0.3s;
+}
+
+.pos-layout.cart-collapsed .cart-content {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .cart-header {
