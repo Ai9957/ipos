@@ -150,6 +150,7 @@
       const [orders, setOrders] = useState([]);
       const [menuItems, setMenuItems] = useState([]);
       const [editingItem, setEditingItem] = useState(null);
+      const [originalItem, setOriginalItem] = useState(null);
       const [categoryOrder, setCategoryOrder] = useState([]);
       const [locallySortedCategories, setLocallySortedCategories] = useState([]);
       const [filterCategory, setFilterCategory] = useState('all');
@@ -229,10 +230,13 @@
            await window.POSDatabase.saveMenuItem(editingItem);
            alert("儲存成功！");
            setEditingItem(null);
+           setOriginalItem(null);
         } catch(e) {
            alert("Firebase 儲存失敗：" + e.message);
         }
       };
+
+      const isDirty = originalItem && editingItem && originalItem !== JSON.stringify(editingItem);
 
       const handleSaveKDSSettings = async () => {
           try {
@@ -278,7 +282,11 @@
               <div>
                 <div style={{display:'flex', justifyContent:'space-between', borderBottom:'2px solid #eee', paddingBottom:'15px', marginBottom:'20px', alignItems:'center'}}>
                    <h2 style={{border:'none', margin:0}}>菜單管理系統</h2>
-                   <button onClick={() => setEditingItem({name:'', price:0, category:'', image:'', hasOptions:false, customOptions:''})} style={{padding: '10px 20px', background: 'var(--primary-color)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold'}}>＋ 新增餐點</button>
+                   <button onClick={() => {
+                      const it = {name:'', price:0, category:'', image:'', hasOptions:false, customOptions:''};
+                      setEditingItem(it);
+                      setOriginalItem(JSON.stringify(it));
+                   }} style={{padding: '10px 20px', background: 'var(--primary-color)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold'}}>＋ 新增餐點</button>
                 </div>
                 
                 <div style={{display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', background: '#fff', padding: '15px', borderRadius: '12px'}}>
@@ -352,8 +360,16 @@
                            <div style={{fontSize:'13px', color:'#777', marginTop:'5px'}}>若不需客製化選項，請留空即可。結帳時客人可複選這些標籤。</div>
                         </div>
                         <div style={{display:'flex', gap:'15px'}}>
-                           <button type="button" onClick={handleSaveMenu} className="btn-done" style={{flex:2}}>儲存</button>
-                           <button type="button" onClick={()=>setEditingItem(null)} style={{flex:1, background:'#ddd', cursor:'pointer', border:'none', borderRadius:'8px', fontWeight:'bold'}}>取消</button>
+                           <button 
+                             type="button" 
+                             onClick={handleSaveMenu} 
+                             className="btn-done" 
+                             style={{flex:2, background: isDirty ? '#2ed573' : '#f1f2f6', color: isDirty ? '#fff' : '#aaa', cursor: isDirty ? 'pointer' : 'not-allowed'}}
+                             disabled={!isDirty}
+                           >
+                             儲存
+                           </button>
+                           <button type="button" onClick={()=>{setEditingItem(null); setOriginalItem(null);}} style={{flex:1, background:'#ddd', cursor:'pointer', border:'none', borderRadius:'8px', fontWeight:'bold'}}>取消</button>
                         </div>
                      </div>
                    </div>
@@ -370,7 +386,11 @@
                               <div style={{color:'#777', fontSize:'14px'}}>{categoryLabelMap[item.category] || item.category} {(item.hasOptions || item.customOptions) && <span style={{color:'var(--primary-color)'}}>✨客製化</span>}</div>
                            </div>
                            <div style={{display:'flex', flexDirection:'column', gap:'8px'}}>
-                              <button onClick={() => setEditingItem({...item, category: categoryLabelMap[item.category] || item.category})} style={{padding:'8px 15px', background:'#f1f2f6', border:'none', borderRadius:'6px', cursor:'pointer'}}>編輯</button>
+                              <button onClick={() => {
+                                 const it = {...item, category: categoryLabelMap[item.category] || item.category};
+                                 setEditingItem(it);
+                                 setOriginalItem(JSON.stringify(it));
+                              }} style={{padding:'8px 15px', background:'#f1f2f6', border:'none', borderRadius:'6px', cursor:'pointer'}}>編輯</button>
                               <button onClick={()=>{if(confirm('確定刪除？')) window.POSDatabase.deleteMenuItem(item.id)}} style={{padding:'8px 15px', background:'#ff6b81', color:'#fff', border:'none', borderRadius:'6px', cursor:'pointer'}}>刪除</button>
                            </div>
                         </div>
