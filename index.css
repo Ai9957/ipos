@@ -86,6 +86,35 @@ body {
   transform: translateY(-50%) rotate(180deg);
 }
 
+.cart-collapse-btn {
+  position: absolute;
+  top: 50%;
+  left: -24px;
+  width: 24px;
+  height: 60px;
+  background: #2f3640;
+  color: #fff;
+  border-radius: 10px 0 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 1000;
+  transform: translateY(-50%);
+  transition: background 0.2s, left 0.3s;
+  font-size: 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-right: none;
+}
+
+.cart-collapse-btn:hover {
+  background: var(--primary-color);
+}
+
+.pos-layout.cart-collapsed .cart-collapse-btn {
+  transform: translateY(-50%) rotate(180deg);
+}
+
 .logo {
   font-size: 24px;
   font-weight: bold;
@@ -216,6 +245,14 @@ body {
   flex-direction: column;
   box-shadow: -2px 0 10px rgba(0,0,0,0.05);
   z-index: 10;
+  transition: width 0.3s;
+  position: relative;
+}
+
+.pos-layout.cart-collapsed .cart-sidebar {
+  width: 0;
+  overflow: hidden;
+  border-left: none;
 }
 
 .cart-header {

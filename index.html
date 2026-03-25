@@ -65,6 +65,7 @@
       const [amountPaid, setAmountPaid] = useState('');
       const [isProcessing, setIsProcessing] = useState(false);
       const [isCollapsed, setIsCollapsed] = useState(false);
+      const [isCartCollapsed, setIsCartCollapsed] = useState(false);
 
       useEffect(() => {
         const unsubMenu = window.POSDatabase.getMenu(setMenuItems);
@@ -158,10 +159,10 @@
       const change = (paymentMethod === '現金' && amountPaid) ? (Number(amountPaid) - totalAmount) : 0;
 
       return (
-        <div className={`pos-layout ${isCollapsed ? 'collapsed' : ''}`}>
+        <div className={`pos-layout ${isCollapsed ? 'collapsed' : ''} ${isCartCollapsed ? 'cart-collapsed' : ''}`}>
           <div className="side-nav">
             <div className="collapse-btn" onClick={() => setIsCollapsed(!isCollapsed)}>
-               {isCollapsed ? '→' : '←'}
+               ←
             </div>
             <div className="logo">{isCollapsed ? '🍟' : '🍟 德上POS'}</div>
             {categories.map(cat => (
@@ -200,6 +201,9 @@
           </div>
 
           <div className="cart-sidebar">
+            <div className="cart-collapse-btn" onClick={() => setIsCartCollapsed(!isCartCollapsed)}>
+              →
+            </div>
             <div className="cart-header">
               <h3 style={{margin:0}}>🛒 購物車</h3>
               <span style={{color:'var(--text-gray)'}}>{cart.length} 品項</span>
