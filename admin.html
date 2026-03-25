@@ -85,7 +85,15 @@
     .input-label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
     .sound-toggle { position: absolute; top: 20px; right: 40px; background: #fff; border: 2px solid #2ed573; padding: 10px 25px; border-radius: 30px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.1); z-index: 10; transition: all 0.2s; }
     .sound-toggle.muted { border-color: #dcdde1; color: #7f8c8d; }
-    .type-badge { padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; background: rgba(255,255,255,0.2); }
+    .type-badge { 
+      padding: 6px 12px; 
+      border-radius: 6px; 
+      font-size: 16px; 
+      font-weight: 900; 
+      color: #fff;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      text-transform: uppercase;
+    }
   </style>
 </head>
 <body onClick="(() => { const a = document.getElementById('orderAudio'); if(a && a.paused) { a.muted = true; a.play().then(() => { a.pause(); a.muted = false; console.log('Audio unlocked'); }).catch(() => {}); } })()">
@@ -124,13 +132,27 @@
       if (elapsed >= redThreshold) color = '#ff4757'; // urgent: red
       else if (elapsed >= yellowThreshold) color = '#ffa502'; // warning: yellow
 
+      const typeColors = {
+        '內用': '#3498db', // Blue
+        '外帶': '#f39c12', // Orange
+        '外送': '#9b59b6'  // Purple
+      };
+      const typeIcons = {
+        '內用': '🏠',
+        '外帶': '🛍️',
+        '外送': '🚲'
+      };
+      const currentType = order.orderType || '內用';
+
       return (
         <div className="order-card" style={{ border: `2px solid ${color}` }}>
           <div className="order-card-header" style={{ background: color, display:'flex', flexDirection:'column', alignItems:'flex-start', padding:'10px 15px' }}>
             <div style={{ display:'flex', justifyContent:'space-between', width:'100%', alignItems:'center' }}>
               <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
                 <span className="order-summary">單號: {getOrderNo(order.id)}</span>
-                <span className="type-badge">{order.orderType || '內用'}</span>
+                <span className="type-badge" style={{ background: typeColors[currentType] || '#7f8c8d' }}>
+                  {typeIcons[currentType]} {currentType}
+                </span>
               </div>
               <span style={{ fontSize:'14px', opacity:0.9 }}>{new Date(order.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} 入單</span>
             </div>
