@@ -279,6 +279,8 @@
       const [selectedHistoryOrder, setSelectedHistoryOrder] = useState(null);
       const [confirmReturnOrder, setConfirmReturnOrder] = useState(null);
       const [adminModal, setAdminModal] = useState(null);
+      const [chartTab, setChartTab] = useState('weekly');
+      const [analysisItemName, setAnalysisItemName] = useState('all');
       
       const lastOrderTimeRef = useRef("");
       const isInitialLoadRef = useRef(true);
@@ -554,7 +556,11 @@
             </div>
             <div className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
               <span className="icon">📊</span>
-              <span>今日營業額</span>
+              <span>今日概覽</span>
+            </div>
+            <div className={`nav-item ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>
+              <span className="icon">📈</span>
+              <span>營業分析</span>
             </div>
             <div className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
               <span className="icon">🕒</span>
@@ -1125,6 +1131,400 @@
                           </tbody>
                         </table>
                       </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {activeTab === 'analytics' && (() => {
+                const now = new Date();
+                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+                const yesterday = today - 86400000;
+                
+                const getPeriodStats = (start, end, itemName = 'all') => {
+                  const filteredOrders = orders.filter(o => {
+                    const d = o.createdAt ? new Date(o.createdAt).getTime() : 0;
+                    return o.status === 'completed' && d >= start && d < end;
+                  });
+
+                  if (itemName && itemName !== 'all') {
+                    let totalQty = 0;
+                    const searchName = String(itemName).trim();
+                    
+                    filteredOrders.forEach(order => {
+                      (order.items || []).forEach(it => {
+                        const itName = String(it.name || "").trim();
+                        const itTitle = String(it.title || "").trim();
+                        
+                        // Check match: Either exact match on name/title OR title starts with "Name ("
+                        const isMatch = (itName === searchName) || 
+                                        (itTitle === searchName) || 
+                                        (itTitle.startsWith(searchName + " ("));
+                        
+                        if (isMatch) {
+                          totalQty += (Number(it.quantity) || 0);
+                        }
+                      });
+                    });
+                    return { revenue: 0, count: totalQty };
+                  }
+                  
+                  const revenue = filteredOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+                  return { revenue, count: filteredOrders.length };
+                };
+
+                // Helper for growth calculation
+                const getGrowth = (curr, prev) => {
+                  if (prev === 0) return curr > 0 ? 100 : 0;
+                  return Math.round(((curr - prev) / prev) * 100);
+                };
+
+                // 1. Daily Comparison
+                const statsToday = getPeriodStats(today, today + 86400000);
+                const statsYesterday = getPeriodStats(yesterday, today);
+                const growthDaily = getGrowth(statsToday.revenue, statsYesterday.revenue);
+
+                // 2. Weekly Comparison (Last 7 days vs Prior 7 days)
+                const week1Start = today - (6 * 86400000);
+                const week2Start = week1Start - (7 * 86400000);
+                const statsThisWeek = getPeriodStats(week1Start, today + 86400000);
+                const statsLastWeek = getPeriodStats(week2Start, week1Start);
+                const growthWeekly = getGrowth(statsThisWeek.revenue, statsLastWeek.revenue);
+
+                // 3. Monthly Comparison
+                const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+                const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
+                const statsThisMonth = getPeriodStats(monthStart, today + 86400000);
+                const statsLastMonth = getPeriodStats(lastMonthStart, monthStart);
+                const growthMonthly = getGrowth(statsThisMonth.revenue, statsLastMonth.revenue);
+
+                // Date Formatting Helpers
+                const fmtDate = (ts) => {
+                  const d = new Date(ts);
+                  return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+                };
+                const fmtMonth = (ts) => {
+                  const d = new Date(ts);
+                  return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`;
+                };
+
+                const dateRangeToday = fmtDate(today);
+                const dateRangeYest = fmtDate(yesterday);
+                const dateRangeWeek = `${fmtDate(week1Start)} ~ ${fmtDate(now)}`;
+                const dateRangePrevWeek = `${fmtDate(week2Start)} ~ ${fmtDate(week1Start - 1)}`;
+                const dateRangeMonth = `${fmtDate(monthStart)} ~ ${fmtDate(now)}`;
+                const dateRangePrevMonth = `${fmtDate(lastMonthStart)} ~ ${fmtDate(monthStart - 1)}`;
+
+                // Chart Data Aggregation
+                let chartData = [];
+                if (chartTab === 'weekly') {
+                  for(let i=6; i>=0; i--) {
+                    const d = new Date(today - i * 86400000);
+                    const stats = getPeriodStats(d.getTime(), d.getTime() + 86400000);
+                    chartData.push({ label: d.toLocaleDateString('zh-TW', { weekday: 'short' }), revenue: stats.revenue, sub: d.toLocaleDateString('zh-TW', { month: '2-digit', day: '2-digit' }) });
+                  }
+                } else if (chartTab === 'monthly') {
+                  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+                  for(let i=1; i<=daysInMonth; i++) {
+                    const d = new Date(now.getFullYear(), now.getMonth(), i);
+                    const stats = getPeriodStats(d.getTime(), d.getTime() + 86400000);
+                    chartData.push({ label: `${i}日`, revenue: stats.revenue, sub: '' });
+                  }
+                } else if (chartTab === 'yearly') {
+                  for(let m=0; m<12; m++) {
+                    const start = new Date(now.getFullYear(), m, 1).getTime();
+                    const end = new Date(now.getFullYear(), m + 1, 1).getTime();
+                    const stats = getPeriodStats(start, end);
+                    chartData.push({ label: `${m+1}月`, revenue: stats.revenue, sub: '' });
+                  }
+                }
+                const maxChartRev = Math.max(...chartData.map(d => d.revenue), 1);
+                
+                // Item Specific Data aggregation
+                let itemChartData = [];
+                if (chartTab === 'weekly') {
+                  for(let i=6; i>=0; i--) {
+                    const d = new Date(today - i * 86400000);
+                    const stats = getPeriodStats(d.getTime(), d.getTime() + 86400000, analysisItemName);
+                    itemChartData.push({ 
+                      label: d.toLocaleDateString('zh-TW', { weekday: 'short' }), 
+                      qty: stats.count,
+                      sub: d.toLocaleDateString('zh-TW', { month: '2-digit', day: '2-digit' }) 
+                    });
+                  }
+                } else if (chartTab === 'monthly') {
+                  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+                  for(let i=1; i<=daysInMonth; i++) {
+                    const d = new Date(now.getFullYear(), now.getMonth(), i);
+                    const stats = getPeriodStats(d.getTime(), d.getTime() + 86400000, analysisItemName);
+                    itemChartData.push({ label: `${i}日`, qty: stats.count });
+                  }
+                } else if (chartTab === 'yearly') {
+                  for(let m=0; m<12; m++) {
+                    const start = new Date(now.getFullYear(), m, 1).getTime();
+                    const end = new Date(now.getFullYear(), m + 1, 1).getTime();
+                    const stats = getPeriodStats(start, end, analysisItemName);
+                    itemChartData.push({ label: `${m+1}月`, qty: stats.count });
+                  }
+                }
+                const maxItemQty = Math.max(...itemChartData.map(d => d.qty), 1);
+
+                // --- Item Comparison Stats ---
+                const itemStatsToday = getPeriodStats(today, today + 86400000, analysisItemName);
+                const itemStatsYesterday = getPeriodStats(yesterday, today, analysisItemName);
+                const itemGrowthDaily = getGrowth(itemStatsToday.count, itemStatsYesterday.count);
+
+                const itemStatsThisWeek = getPeriodStats(week1Start, today + 86400000, analysisItemName);
+                const itemStatsLastWeek = getPeriodStats(week2Start, week1Start, analysisItemName);
+                const itemGrowthWeekly = getGrowth(itemStatsThisWeek.count, itemStatsLastWeek.count);
+
+                const itemStatsThisMonth = getPeriodStats(monthStart, today + 86400000, analysisItemName);
+                const itemStatsLastMonth = getPeriodStats(lastMonthStart, monthStart, analysisItemName);
+                const itemGrowthMonthly = getGrowth(itemStatsThisMonth.count, itemStatsLastMonth.count);
+
+                return (
+                  <div style={{animation:'fadeIn 0.3s ease-out'}}>
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', paddingBottom:'15px', marginBottom:'25px'}}>
+                      <div>
+                        <h2 style={{borderBottom:'none', paddingBottom:0, marginBottom:'10px', fontSize:'28px'}}>📈 進階營運分析 (Business Analytics)</h2>
+                        <div style={{color:'#777'}}>分析歷史趨勢與期別成長，輔助經營決策。</div>
+                      </div>
+                    </div>
+
+                    {/* Comparison Cards */}
+                    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:'25px', marginBottom:'40px'}}>
+                      {/* Today vs Yesterday */}
+                      <div style={{background:'#fff', padding:'25px', borderRadius:'18px', boxShadow:'0 10px 30px rgba(0,0,0,0.05)', border:'1px solid #eee'}}>
+                        <div style={{display:'flex', justifyContent:'space-between', marginBottom:'10px'}}>
+                          <div style={{display:'flex', flexDirection:'column'}}>
+                            <span style={{color:'#7f8c8d', fontSize:'16px', fontWeight:'bold'}}>今日營收 (Daily)</span>
+                            <span style={{fontSize:'12px', color:'#95a5a6'}}>日期：{dateRangeToday}</span>
+                          </div>
+                          <span style={{background: growthDaily >= 0 ? '#e1f9eb' : '#fff0f0', color: growthDaily >= 0 ? '#27ae60' : '#e74c3c', padding:'4px 12px', borderRadius:'20px', fontSize:'14px', fontWeight:'bold', alignSelf:'flex-start'}}>
+                            {growthDaily >= 0 ? '↑' : '↓'} {Math.abs(growthDaily)}%
+                          </span>
+                        </div>
+                        <div style={{fontSize:'36px', fontWeight:'900', color:'#2c3e50', marginBottom:'5px'}}>${statsToday.revenue.toLocaleString()}</div>
+                        <div style={{color:'#95a5a6', fontSize:'13px', paddingTop:'10px', borderTop:'1px solid #f8f9fa'}}>
+                           昨日 ({dateRangeYest})：${statsYesterday.revenue.toLocaleString()}
+                        </div>
+                      </div>
+
+                      {/* Week vs Week */}
+                      <div style={{background:'#fff', padding:'25px', borderRadius:'18px', boxShadow:'0 10px 30px rgba(0,0,0,0.05)', border:'1px solid #eee'}}>
+                        <div style={{display:'flex', justifyContent:'space-between', marginBottom:'10px'}}>
+                          <div style={{display:'flex', flexDirection:'column'}}>
+                            <span style={{color:'#7f8c8d', fontSize:'16px', fontWeight:'bold'}}>近七日營收 (Weekly)</span>
+                            <span style={{fontSize:'12px', color:'#95a5a6'}}>區間：{dateRangeWeek}</span>
+                          </div>
+                          <span style={{background: growthWeekly >= 0 ? '#e1f9eb' : '#fff0f0', color: growthWeekly >= 0 ? '#27ae60' : '#e74c3c', padding:'4px 12px', borderRadius:'20px', fontSize:'14px', fontWeight:'bold', alignSelf:'flex-start'}}>
+                             {growthWeekly >= 0 ? '↑' : '↓'} {Math.abs(growthWeekly)}%
+                          </span>
+                        </div>
+                        <div style={{fontSize:'36px', fontWeight:'900', color:'#2c3e50', marginBottom:'5px'}}>${statsThisWeek.revenue.toLocaleString()}</div>
+                        <div style={{color:'#95a5a6', fontSize:'13px', paddingTop:'10px', borderTop:'1px solid #f8f9fa'}}>
+                           上期 ({dateRangePrevWeek})：${statsLastWeek.revenue.toLocaleString()}
+                        </div>
+                      </div>
+
+                      {/* Month vs Month */}
+                      <div style={{background:'#fff', padding:'25px', borderRadius:'18px', boxShadow:'0 10px 30px rgba(0,0,0,0.05)', border:'1px solid #eee'}}>
+                        <div style={{display:'flex', justifyContent:'space-between', marginBottom:'10px'}}>
+                          <div style={{display:'flex', flexDirection:'column'}}>
+                            <span style={{color:'#7f8c8d', fontSize:'16px', fontWeight:'bold'}}>本月累計 (Monthly)</span>
+                            <span style={{fontSize:'12px', color:'#95a5a6'}}>區間：{dateRangeMonth}</span>
+                          </div>
+                          <span style={{background: growthMonthly >= 0 ? '#e1f9eb' : '#fff0f0', color: growthMonthly >= 0 ? '#27ae60' : '#e74c3c', padding:'4px 12px', borderRadius:'20px', fontSize:'14px', fontWeight:'bold', alignSelf:'flex-start'}}>
+                            {growthMonthly >= 0 ? '↑' : '↓'} {Math.abs(growthMonthly)}%
+                          </span>
+                        </div>
+                        <div style={{fontSize:'36px', fontWeight:'900', color:'#2c3e50', marginBottom:'5px'}}>${statsThisMonth.revenue.toLocaleString()}</div>
+                        <div style={{color:'#95a5a6', fontSize:'13px', paddingTop:'10px', borderTop:'1px solid #f8f9fa'}}>
+                           上月 ({dateRangePrevMonth})：${statsLastMonth.revenue.toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{display:'grid', gridTemplateColumns:'1.5fr 1fr', gap:'30px'}}>
+                        {/* Dynamic Trend Chart */}
+                        <div style={{background:'#fff', padding:'35px', borderRadius:'20px', boxShadow:'0 10px 30px rgba(0,0,0,0.05)'}}>
+                           <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'30px'}}>
+                              <h3 style={{margin:0, color:'#2c3e50', fontSize:'22px', border:'none', padding:0}}>📊 營收趨勢分析 ({chartTab === 'weekly' ? '近七日' : chartTab === 'monthly' ? '本月每日' : '本年每月'})</h3>
+                              <div style={{background:'#f1f2f6', padding:'5px', borderRadius:'12px', display:'flex', gap:'5px'}}>
+                                 {['weekly', 'monthly', 'yearly'].map(t => (
+                                    <button 
+                                      key={t}
+                                      onClick={() => setChartTab(t)}
+                                      style={{
+                                        padding:'8px 15px', 
+                                        borderRadius:'8px', 
+                                        border:'none', 
+                                        background: chartTab === t ? 'var(--primary-color)' : 'transparent',
+                                        color: chartTab === t ? '#fff' : '#7f8c8d',
+                                        fontWeight:'bold',
+                                        cursor:'pointer',
+                                        transition:'all 0.2s'
+                                      }}
+                                    >
+                                      {t === 'weekly' ? '週' : t === 'monthly' ? '月' : '年'}
+                                    </button>
+                                 ))}
+                              </div>
+                           </div>
+                           <div style={{display:'flex', alignItems:'flex-end', height:'240px', gap: chartTab === 'monthly' ? '4px' : '20px', paddingBottom:'25px', borderBottom:'2px solid #f1f2f6', marginBottom:'15px', overflowX:'auto'}}>
+                              {chartData.map((d, idx) => {
+                                const isToday = chartTab === 'weekly' && idx === 6;
+                                const isCurrentMonth = chartTab === 'yearly' && idx === now.getMonth();
+                                return (
+                                  <div key={idx} style={{flex:1, minWidth: chartTab === 'monthly' ? '12px' : '30px', display:'flex', flexDirection:'column', alignItems:'center', gap:'10px'}}>
+                                     <div style={{fontSize:'10px', color:'#bdc3c7', fontWeight:'bold', transform:'rotate(-45deg)', height:'15px'}}>{d.revenue > 0 ? (d.revenue > 1000 ? `${Math.round(d.revenue/1000)}k` : d.revenue) : ''}</div>
+                                     <div style={{
+                                        width:'100%', 
+                                        height:`${(d.revenue / maxChartRev) * 180}px`,
+                                        background: isToday || isCurrentMonth ? 'var(--primary-color)' : '#ecf0f1',
+                                        borderRadius:'4px 4px 0 0',
+                                        transition:'height 0.8s ease-out',
+                                        opacity: d.revenue === 0 ? 0.3 : 1
+                                     }}></div>
+                                  </div>
+                                );
+                              })}
+                           </div>
+                           <div style={{display:'flex', gap: chartTab === 'monthly' ? '4px' : '20px', overflowX:'auto'}}>
+                              {chartData.map((d, idx) => (
+                                <div key={idx} style={{flex:1, minWidth: chartTab === 'monthly' ? '12px' : '30px', textAlign:'center'}}>
+                                   <div style={{fontSize: chartTab === 'monthly' ? '10px' : '14px', fontWeight:'bold', color: '#2c3e50'}}>{d.label}</div>
+                                   {d.sub && <div style={{fontSize:'10px', color:'#bdc3c7'}}>{d.sub}</div>}
+                                </div>
+                              ))}
+                           </div>
+                        </div>
+
+                        {/* Analysis Insights */}
+                        <div style={{background:'linear-gradient(135deg, #2c3e50, #2f3640)', padding:'35px', borderRadius:'20px', color:'#fff', boxShadow:'0 15px 35px rgba(0,0,0,0.2)'}}>
+                           <h3 style={{color:'#fff', borderBottom:'1px solid rgba(255,255,255,0.1)', paddingBottom:'15px', marginBottom:'25px', fontSize:'22px'}}>💡 經營策略建議</h3>
+                           <div style={{display:'flex', flexDirection:'column', gap:'25px'}}>
+                              <div style={{display:'flex', gap:'15px'}}>
+                                 <div style={{fontSize:'24px'}}>🚀</div>
+                                 <div style={{fontSize:'16px', lineHeight:'1.6'}}>
+                                    {growthDaily > 0 ? 
+                                       `今日業績相比昨日成長了 ${growthDaily}%，建議觀察高峰時段的人力配置是否充足。` : 
+                                       `今日業績較昨日略有下滑，可檢查下午離峰時段是否能推出促銷小點。`}
+                                 </div>
+                              </div>
+                              <div style={{display:'flex', gap:'15px'}}>
+                                 <div style={{fontSize:'24px'}}>🗓️</div>
+                                 <div style={{fontSize:'16px', lineHeight:'1.6'}}>
+                                    {growthWeekly > 20 ? 
+                                       '本週呈現強勁成長動能！可以考慮增加熱門商品的備料。' : 
+                                       '本週趨勢平穩。週末即將到來，建議進行週末限定促銷提升買氣。'}
+                                 </div>
+                              </div>
+                              <div style={{display:'flex', gap:'15px', marginTop:'20px', padding:'20px', background:'rgba(255,255,255,0.05)', borderRadius:'12px'}}>
+                                 <div style={{fontSize:'16px'}}>
+                                    <div style={{fontWeight:'bold', marginBottom:'10px', color:'#f1c40f'}}>戰略提醒：</div>
+                                    目前 AOV 為 <strong style={{fontSize:'20px'}}>${todayOrders.length ? Math.round(todayTotal/todayOrders.length) : 0}</strong>。
+                                    嘗試引導客人搭配套餐銷售，目標將客單價提升 10% 以最大化坪效。
+                                 </div>
+                              </div>
+                           </div>
+                        </div>
+                    </div>
+
+                    {/* Item Specific Analysis */}
+                    <div style={{background:'#fff', padding:'35px', borderRadius:'20px', boxShadow:'0 10px 30px rgba(0,0,0,0.05)', marginTop:'30px'}}>
+                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'30px', flexWrap:'wrap', gap:'20px'}}>
+                           <div style={{display:'flex', alignItems:'center', gap:'15px', flexWrap:'wrap'}}>
+                              <h3 style={{margin:0, color:'#2c3e50', fontSize:'22px', border:'none', padding:0}}>🥗 單品銷量趨勢分析 (Item Trends)</h3>
+                              <select 
+                                value={analysisItemName} 
+                                onChange={e => setAnalysisItemName(e.target.value)}
+                                style={{padding:'10px 20px', borderRadius:'12px', border:'2px solid #3498db', fontSize:'16px', fontWeight:'bold', cursor:'pointer', outline:'none', background:'#fff'}}
+                              >
+                                 <option value="all">-- 請選擇餐點 --</option>
+                                 {menuItems.map(it => <option key={it.id} value={it.name}>{it.name}</option>)}
+                              </select>
+                           </div>
+                           <div style={{fontSize:'16px', color:'#7f8c8d'}}>
+                              分析項目：<strong style={{color:'#3498db'}}>{analysisItemName === 'all' ? '未選擇' : analysisItemName}</strong>
+                           </div>
+                        </div>
+
+                        {analysisItemName === 'all' ? (
+                          <div style={{height:'350px', background:'#f8f9fa', borderRadius:'15px', display:'flex', alignItems:'center', justifyContent:'center', border:'2px dashed #eee'}}>
+                             <div style={{textAlign:'center', color:'#95a5a6'}}>
+                                <div style={{fontSize:'40px', marginBottom:'10px'}}>🎯</div>
+                                <div style={{fontSize:'18px', fontWeight:'bold'}}>請從上方下拉選單選擇想要分析的單一餐點</div>
+                                <div style={{marginTop:'10px'}}>系統將會顯示該品項在對應時段（週/月/年）的銷量變化</div>
+                             </div>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Item KPI Cards */}
+                            <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(280px, 1fr))', gap:'20px', marginBottom:'35px'}}>
+                               <div style={{background:'#f8fdfa', padding:'20px', borderRadius:'15px', border:'1px solid #e1f9eb'}}>
+                                  <div style={{display:'flex', justifyContent:'space-between', marginBottom:'10px', alignItems:'center'}}>
+                                     <span style={{fontSize:'14px', color:'#7f8c8d', fontWeight:'bold'}}>今日銷量 (份)</span>
+                                     <span style={{color: itemGrowthDaily >=0 ? '#27ae60' : '#e74c3c', fontWeight:'bold', fontSize:'12px'}}>
+                                        {itemGrowthDaily >=0 ? '↑' : '↓'} {Math.abs(itemGrowthDaily)}%
+                                     </span>
+                                  </div>
+                                  <div style={{fontSize:'28px', fontWeight:'900', color:'#2c3e50'}}>{itemStatsToday.count} <span style={{fontSize:'14px', fontWeight:'normal', color:'#7f8c8d'}}>份</span></div>
+                                  <div style={{fontSize:'12px', color:'#95a5a6', marginTop:'5px'}}>昨日 ({dateRangeYest})：{itemStatsYesterday.count} 份</div>
+                               </div>
+                               <div style={{background:'#f8fdfa', padding:'20px', borderRadius:'15px', border:'1px solid #e1f9eb'}}>
+                                  <div style={{display:'flex', justifyContent:'space-between', marginBottom:'10px', alignItems:'center'}}>
+                                     <div style={{display:'flex', flexDirection:'column'}}>
+                                        <span style={{fontSize:'14px', color:'#7f8c8d', fontWeight:'bold'}}>本週銷量 (Weekly)</span>
+                                        <span style={{fontSize:'11px', color:'#95a5a6'}}>{dateRangeWeek}</span>
+                                     </div>
+                                     <span style={{color: itemGrowthWeekly >=0 ? '#27ae60' : '#e74c3c', fontWeight:'bold', fontSize:'12px', alignSelf:'flex-start'}}>
+                                        {itemGrowthWeekly >=0 ? '↑' : '↓'} {Math.abs(itemGrowthWeekly)}%
+                                     </span>
+                                  </div>
+                                  <div style={{fontSize:'28px', fontWeight:'900', color:'#2c3e50'}}>{itemStatsThisWeek.count} <span style={{fontSize:'14px', fontWeight:'normal', color:'#7f8c8d'}}>份</span></div>
+                                  <div style={{fontSize:'12px', color:'#95a5a6', marginTop:'5px'}}>上期 ({dateRangePrevWeek})：{itemStatsLastWeek.count} 份</div>
+                               </div>
+                               <div style={{background:'#f8fdfa', padding:'20px', borderRadius:'15px', border:'1px solid #e1f9eb'}}>
+                                  <div style={{display:'flex', justifyContent:'space-between', marginBottom:'10px', alignItems:'center'}}>
+                                     <div style={{display:'flex', flexDirection:'column'}}>
+                                        <span style={{fontSize:'14px', color:'#7f8c8d', fontWeight:'bold'}}>本月累計 (Monthly)</span>
+                                        <span style={{fontSize:'11px', color:'#95a5a6'}}>{dateRangeMonth}</span>
+                                     </div>
+                                     <span style={{color: itemGrowthMonthly >=0 ? '#27ae60' : '#e74c3c', fontWeight:'bold', fontSize:'12px', alignSelf:'flex-start'}}>
+                                        {itemGrowthMonthly >=0 ? '↑' : '↓'} {Math.abs(itemGrowthMonthly)}%
+                                     </span>
+                                  </div>
+                                  <div style={{fontSize:'28px', fontWeight:'900', color:'#2c3e50'}}>{itemStatsThisMonth.count} <span style={{fontSize:'14px', fontWeight:'normal', color:'#7f8c8d'}}>份</span></div>
+                                  <div style={{fontSize:'12px', color:'#95a5a6', marginTop:'5px'}}>上期 ({dateRangePrevMonth})：{itemStatsLastMonth.count} 份</div>
+                               </div>
+                            </div>
+
+                            <div style={{display:'flex', alignItems:'flex-end', height:'260px', gap: chartTab === 'monthly' ? '4px' : '20px', paddingBottom:'25px', borderBottom:'2px solid #f1f2f6', marginBottom:'15px', overflowX:'auto'}}>
+                              {itemChartData.map((d, idx) => (
+                                <div key={idx} style={{flex:1, minWidth: chartTab === 'monthly' ? '12px' : '40px', display:'flex', flexDirection:'column', alignItems:'center', gap:'10px'}}>
+                                   <div style={{fontSize:'12px', color:'#27ae60', fontWeight:'bold'}}>{d.qty > 0 ? `${d.qty}份` : ''}</div>
+                                   <div style={{
+                                      width:'100%', 
+                                      height:`${(d.qty / maxItemQty) * 200}px`,
+                                      background:'linear-gradient(180deg, #2ecc71, #27ae60)',
+                                      borderRadius:'4px 4px 0 0',
+                                      transition:'height 0.8s ease-out',
+                                      opacity: d.qty === 0 ? 0.2 : 1
+                                   }}></div>
+                                </div>
+                              ))}
+                            </div>
+                            <div style={{display:'flex', gap: chartTab === 'monthly' ? '4px' : '20px', overflowX:'auto'}}>
+                              {itemChartData.map((d, idx) => (
+                                 <div key={idx} style={{flex:1, minWidth: chartTab === 'monthly' ? '12px' : '40px', textAlign:'center'}}>
+                                   <div style={{fontSize: chartTab === 'monthly' ? '10px' : '14px', fontWeight:'bold', color: '#2c3e50'}}>{d.label}</div>
+                                   {d.sub && <div style={{fontSize:'10px', color:'#bdc3c7'}}>{d.sub}</div>}
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
                     </div>
                   </div>
                 );
