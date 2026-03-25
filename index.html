@@ -66,11 +66,12 @@
       const categoryLabelMap = { burger: '漢堡', snack: '點心', drink: '飲料', combo: '套餐' };
       const categories = useMemo(() => {
         const cats = Array.from(new Set(menuItems.map(item => categoryLabelMap[item.category] || item.category).filter(Boolean)));
-        return ['全部', ...cats].sort((a, b) => {
+        const finalCats = ['全部', ...cats].sort((a, b) => {
           if (a === '全部') return -1; if (b === '全部') return 1;
           let ia = categoryOrder.indexOf(a), ib = categoryOrder.indexOf(b);
           return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
         });
+        return finalCats;
       }, [menuItems, categoryOrder]);
 
       const sortedMenuItems = useMemo(() => {
@@ -134,21 +135,23 @@
       const change = (paymentMethod === '現金' && amountPaid) ? (Number(amountPaid) - totalAmount) : 0;
 
       return (
-        <div className="pos-container">
-          <div className="sidebar">
-            <h2>🍟 德上快餐店</h2>
-            <div className="categories">
-              {categories.map(cat => (
-                <div key={cat} className={`category-item ${activeCategory === cat ? 'active' : ''}`} onClick={() => setActiveCategory(cat)}>
-                  {cat}
-                </div>
-              ))}
-            </div>
+        <div className="pos-layout">
+          <div className="side-nav">
+            <div className="logo">🍟</div>
+            {categories.map(cat => (
+              <div key={cat} className={`nav-item ${activeCategory === cat ? 'active' : ''}`} onClick={() => setActiveCategory(cat)}>
+                {cat}
+              </div>
+            ))}
           </div>
+
           <div className="main-content">
-            <div className="product-grid">
+            <div className="header">
+              <h1>德上快餐店 POS</h1>
+            </div>
+            <div className="menu-grid">
               {sortedMenuItems.map(product => (
-                <div key={product.id} className="product-card" onClick={() => {
+                <div key={product.id} className="menu-card" onClick={() => {
                    if (product.customOptions || product.hasOptions) {
                       const opts = (product.customOptions || '').split(',').map(s => s.trim()).filter(Boolean);
                       if (opts.length > 0) {
@@ -157,60 +160,77 @@
                       } else { addToCart(product); }
                    } else { addToCart(product); }
                 }}>
-                  <img src={product.image} alt={product.name} />
-                  <div className="product-info">
-                    <div className="product-name">{product.name}</div>
-                    <div className="product-price">${product.price}</div>
+                  <div className="card-img-wrapper">
+                    <img src={product.image} className="card-img" alt={product.name} />
+                  </div>
+                  <div className="card-info">
+                    <div className="card-title">{product.name}</div>
+                    <div className="card-price">${product.price}</div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
-          <div className="cart-panel">
-            <h3>🛒 購物車</h3>
+
+          <div className="cart-sidebar">
+            <div className="cart-header">
+              <h3 style={{margin:0}}>🛒 購物車</h3>
+              <span style={{color:'var(--text-gray)'}}>{cart.length} 品項</span>
+            </div>
             <div className="cart-items">
-              {cart.map((item, index) => (
+              {cart.length === 0 ? (
+                <div className="cart-empty">點擊左側餐點加入購物車</div>
+              ) : cart.map((item, index) => (
                 <div key={index} className="cart-item">
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:'bold'}}>{item.name}</div>
-                    {item.options?.length > 0 && <div style={{fontSize:'12px', color:'#777'}}>{item.options.join(', ')}</div>}
-                    <div>${item.price} x {item.quantity}</div>
+                  <div className="cart-item-main">
+                    <div className="cart-item-title">{item.name}</div>
+                    <div className="cart-item-price">${item.price * item.quantity}</div>
                   </div>
-                  <div className="quantity-controls">
-                    <button onClick={() => updateQuantity(index, -1)}>-</button>
-                    <span>{item.quantity}</span>
-                    <button onClick={() => updateQuantity(index, 1)}>+</button>
+                  {item.options?.length > 0 && <div style={{fontSize:'12px', color:'#777', marginBottom:'8px'}}>{item.options.join(', ')}</div>}
+                  <div className="cart-item-actions">
+                    <button className="delete-btn" onClick={() => updateQuantity(index, -item.quantity)}>移除</button>
+                    <div className="qty-btn-group">
+                      <button className="qty-btn" onClick={() => updateQuantity(index, -1)}>-</button>
+                      <span className="qty-label">{item.quantity}</span>
+                      <button className="qty-btn" onClick={() => updateQuantity(index, 1)}>+</button>
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
             <div className="cart-footer">
-              <div className="total">總計: ${totalAmount}</div>
-              <button className="btn-checkout" onClick={() => { if(cart.length > 0) setShowCheckout(true); }}>結帳送出</button>
+              <div className="summary-row">
+                <span>總計</span>
+                <span style={{color:'var(--primary-color)'}}>${totalAmount}</span>
+              </div>
+              <button className="checkout-btn" disabled={cart.length === 0} onClick={() => setShowCheckout(true)}>結帳送出</button>
             </div>
           </div>
 
           {showOptionsModal && (
             <div className="modal-overlay">
-              <div className="modal-content" style={{maxWidth:'400px'}}>
-                <h3>選擇客製化： {showOptionsModal.name}</h3>
-                <div style={{display:'flex', flexWrap:'wrap', gap:'10px', margin:'20px 0'}}>
-                   {(showOptionsModal.customOptions || '').split(',').map(opt => {
-                      const s = opt.trim(); if(!s) return null;
-                      const active = selectedOptions.includes(s);
-                      return (
-                        <button key={s} onClick={() => {
-                           if(active) setSelectedOptions(selectedOptions.filter(o => o !== s));
-                           else setSelectedOptions([...selectedOptions, s]);
-                        }} style={{padding:'10px 15px', borderRadius:'20px', border:'1px solid #ddd', background: active ? 'var(--primary-color)' : '#fff', color: active ? '#fff' : '#333'}}>
-                          {s}
-                        </button>
-                      );
-                   })}
+              <div className="modal-box">
+                <div className="modal-header">選擇客製化： {showOptionsModal.name}</div>
+                <div className="modifier-section">
+                  <div className="modifier-title">可選擇多項標籤：</div>
+                  <div className="modifier-options">
+                    {(showOptionsModal.customOptions || '').split(',').map(opt => {
+                        const s = opt.trim(); if(!s) return null;
+                        const active = selectedOptions.includes(s);
+                        return (
+                          <div key={s} className={`mod-option ${active ? 'active' : ''}`} onClick={() => {
+                             if(active) setSelectedOptions(selectedOptions.filter(o => o !== s));
+                             else setSelectedOptions([...selectedOptions, s]);
+                          }}>
+                            {s}
+                          </div>
+                        );
+                    })}
+                  </div>
                 </div>
-                <div style={{display:'flex', gap:'10px'}}>
-                   <button className="btn-confirm" onClick={() => { addToCart(showOptionsModal, selectedOptions); setShowOptionsModal(null); }}>加入購物車</button>
-                   <button className="btn-cancel" onClick={() => setShowOptionsModal(null)}>取消</button>
+                <div className="modal-actions">
+                   <button className="btn btn-confirm" onClick={() => { addToCart(showOptionsModal, selectedOptions); setShowOptionsModal(null); }}>確認</button>
+                   <button className="btn btn-cancel" onClick={() => setShowOptionsModal(null)}>取消</button>
                 </div>
               </div>
             </div>
@@ -218,70 +238,62 @@
 
           {showCheckout && (
             <div className="modal-overlay">
-              <div className="modal-content checkout-modal" style={{maxWidth:'700px', display:'flex', flexDirection:'row', gap:'20px', padding:'30px'}}>
+              <div className="modal-box" style={{width:'800px', maxWidth:'95vw', display:'flex', gap:'30px'}}>
                 <div style={{flex: 1}}>
-                  <h3 style={{marginTop:0}}>結帳與付款</h3>
-                  <div style={{marginBottom:'20px', background:'#f8f9fa', padding:'15px', borderRadius:'10px'}}>
-                    <div style={{fontSize:'18px', marginBottom: '10px'}}>點餐內容：</div>
-                    {cart.map((item, idx) => (
-                      <div key={idx} style={{display:'flex', justifyContent:'space-between', marginBottom:'5px', fontSize:'14px'}}>
-                        <span>{item.quantity}x {item.name}</span>
-                        <span>${item.price * item.quantity}</span>
-                      </div>
-                    ))}
-                    <div style={{borderTop:'1px solid #ddd', marginTop:'10px', paddingTop:'10px', fontSize:'24px', fontWeight:'bold', color:'var(--primary-color)', textAlign:'right'}}>
-                      應付總額: ${totalAmount}
-                    </div>
+                  <div className="modal-header">結帳與付款</div>
+                  <div style={{background:'#f8f9fa', padding:'20px', borderRadius:'12px', marginBottom:'20px'}}>
+                    <div style={{fontSize:'14px', color:'#777', marginBottom:'10px'}}>應付總額</div>
+                    <div style={{fontSize:'32px', fontWeight:'bold', color:'var(--primary-color)'}}>${totalAmount}</div>
                   </div>
 
                   <div style={{marginBottom:'20px'}}>
-                    <label style={{display:'block', marginBottom:'8px', fontWeight:'bold'}}>點餐類型：</label>
-                    <div style={{display:'flex', gap:'10px'}}>
+                    <div className="modifier-title">點餐類型</div>
+                    <div className="modifier-options">
                       {['內用', '外帶', '外送'].map(t => (
-                        <button key={t} onClick={() => setOrderType(t)} style={{flex:1, padding:'12px', borderRadius:'8px', border:'2px solid', borderColor: orderType === t ? 'var(--primary-color)' : '#ddd', background: orderType === t ? '#fff3ed' : '#fff', fontWeight:'bold'}}>{t}</button>
+                        <div key={t} className={`mod-option ${orderType === t ? 'active' : ''}`} style={{padding:'12px 25px'}} onClick={() => setOrderType(t)}>{t}</div>
                       ))}
                     </div>
                   </div>
 
-                  <div>
-                    <label style={{display:'block', marginBottom:'8px', fontWeight:'bold'}}>支付方式：</label>
-                    <div style={{display:'flex', gap:'10px', marginBottom:'15px'}}>
+                  <div style={{marginBottom:'25px'}}>
+                    <div className="modifier-title">支付方式</div>
+                    <div className="modifier-options">
                       {['現金', '信用卡', 'LINE Pay'].map(p => (
-                        <button key={p} onClick={() => setPaymentMethod(p)} style={{flex:1, padding:'12px', borderRadius:'8px', border:'2px solid', borderColor: paymentMethod === p ? 'var(--primary-color)' : '#ddd', background: paymentMethod === p ? '#fff3ed' : '#fff', fontWeight:'bold'}}>{p}</button>
+                        <div key={p} className={`mod-option ${paymentMethod === p ? 'active' : ''}`} style={{padding:'12px 25px'}} onClick={() => setPaymentMethod(p)}>{p}</div>
                       ))}
                     </div>
                   </div>
 
-                  <div style={{display:'flex', gap:'10px', marginTop:'20px'}}>
-                    <button className="btn-confirm" style={{flex:1, height:'60px', fontSize:'20px'}} onClick={handleCheckout} disabled={isProcessing || (paymentMethod === '現金' && Number(amountPaid) < totalAmount)}>
+                  <div className="modal-actions">
+                    <button className="btn btn-confirm" style={{height:'60px', fontSize:'20px'}} onClick={handleCheckout} disabled={isProcessing || (paymentMethod === '現金' && (Number(amountPaid) < totalAmount || !amountPaid))}>
                       {isProcessing ? '處理中...' : '確認結帳送出'}
                     </button>
-                    <button className="btn-cancel" style={{padding:'0 25px'}} onClick={() => setShowCheckout(false)} disabled={isProcessing}>關閉</button>
+                    <button className="btn btn-cancel" onClick={() => setShowCheckout(false)} disabled={isProcessing}>關閉</button>
                   </div>
                 </div>
 
                 {paymentMethod === '現金' && (
-                  <div style={{width:'300px', borderLeft:'1px solid #eee', paddingLeft:'20px'}}>
-                    <h4 style={{marginTop:0}}>現金計算機 (TWD)</h4>
-                    <div style={{background:'#eee', padding:'15px', borderRadius:'8px', marginBottom:'15px', textAlign:'right'}}>
-                      <div style={{fontSize:'12px', color:'#777'}}>實付金額</div>
-                      <div style={{fontSize:'32px', fontWeight:'bold'}}>${amountPaid || 0}</div>
-                      <div style={{borderTop:'1px solid #ccc', marginTop:'5px', paddingTop:'5px', color: change >= 0 ? '#2ed573' : '#ff4757'}}>
+                  <div style={{width:'320px', borderLeft:'1px solid #eee', paddingLeft:'30px'}}>
+                    <div className="modifier-title">現金計算機 (TWD)</div>
+                    <div style={{background: '#2f3640', color: '#fff', padding:'20px', borderRadius:'12px', marginBottom:'20px', textAlign:'right'}}>
+                      <div style={{fontSize:'12px', opacity:0.7}}>實收金額</div>
+                      <div style={{fontSize:'36px', fontWeight:'bold', fontFamily:'monospace'}}>${amountPaid || 0}</div>
+                      <div style={{borderTop:'1px solid rgba(255,255,255,0.1)', marginTop:'10px', paddingTop:'10px', color: change >= 0 ? '#badc58' : '#ff6b81', fontWeight:'bold'}}>
                         {change >= 0 ? `應找零: $${change}` : `還差: $${Math.abs(change)}`}
                       </div>
                     </div>
                     
-                    <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'8px'}}>
+                    <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'10px'}}>
                        {[1,2,3,4,5,6,7,8,9,0,'00'].map(n => (
-                         <button key={n} onClick={() => handleNumpad(n.toString())} style={{padding:'15px', fontSize:'20px', borderRadius:'8px', border:'1px solid #ddd', background:'#fff', fontWeight:'bold'}}>{n}</button>
+                         <button key={n} onClick={() => handleNumpad(n.toString())} style={{padding:'18px', fontSize:'22px', borderRadius:'10px', border:'1px solid #ddd', background:'#fff', fontWeight:'bold', cursor:'pointer'}}>{n}</button>
                        ))}
-                       <button onClick={() => handleNumpad('C')} style={{padding:'15px', fontSize:'20px', borderRadius:'8px', border:'1px solid #ddd', background:'#ff6b81', color:'#fff', fontWeight:'bold'}}>C</button>
+                       <button onClick={() => handleNumpad('C')} style={{padding:'18px', fontSize:'22px', borderRadius:'10px', border:'none', background:'#ff4757', color:'#fff', fontWeight:'bold', cursor:'pointer'}}>C</button>
                     </div>
 
-                    <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'8px', marginTop:'15px'}}>
-                      <button onClick={() => setAmountPaid(String(Number(amountPaid) + 100))} style={{padding:'10px', background:'#f1f2f6', border:'1px solid #ddd', borderRadius:'8px', fontWeight:'bold'}}>+100</button>
-                      <button onClick={() => setAmountPaid(String(Number(amountPaid) + 500))} style={{padding:'10px', background:'#f1f2f6', border:'1px solid #ddd', borderRadius:'8px', fontWeight:'bold'}}>+500</button>
-                      <button onClick={() => setAmountPaid(String(Number(amountPaid) + 1000))} style={{padding:'10px', background:'#f1f2f6', border:'1px solid #ddd', borderRadius:'8px', fontWeight:'bold'}}>+1000</button>
+                    <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'10px', marginTop:'15px'}}>
+                      <button onClick={() => setAmountPaid(String(Number(amountPaid) + 100))} style={{padding:'12px', background:'#f8f9fa', border:'1px solid #ddd', borderRadius:'8px', fontWeight:'bold', cursor:'pointer'}}>+100</button>
+                      <button onClick={() => setAmountPaid(String(Number(amountPaid) + 500))} style={{padding:'12px', background:'#f8f9fa', border:'1px solid #ddd', borderRadius:'8px', fontWeight:'bold', cursor:'pointer'}}>+500</button>
+                      <button onClick={() => setAmountPaid(String(Number(amountPaid) + 1000))} style={{padding:'12px', background:'#f8f9fa', border:'1px solid #ddd', borderRadius:'8px', fontWeight:'bold', cursor:'pointer'}}>+1000</button>
                     </div>
                   </div>
                 )}
