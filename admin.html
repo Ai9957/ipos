@@ -166,8 +166,16 @@
       const [kdsSettings, setKdsSettings] = useState({ yellow: 5, red: 10 });
       const [isMuted, setIsMuted] = useState(false);
       
-      const prevOrderCountRef = useRef(0);
+      const lastOrderTimeRef = useRef("");
       const isInitialLoadRef = useRef(true);
+
+      const playOrderSound = () => {
+        const audio = document.getElementById('orderAudio');
+        if (audio) {
+          audio.currentTime = 0;
+          audio.play().catch(e => console.warn('Audio play blocked:', e));
+        }
+      };
 
       useEffect(() => {
         const unsub = window.POSDatabase.getCategoryOrder(setCategoryOrder);
@@ -226,17 +234,19 @@
           const currentData = data || [];
           const pending = currentData.filter(o => o.status === 'pending');
           
-          if (!isInitialLoadRef.current && pending.length > prevOrderCountRef.current) {
-            if (!isMuted) {
-              const audio = document.getElementById('orderAudio');
-              if (audio) {
-                audio.currentTime = 0;
-                audio.play().catch(e => console.warn('Audio play blocked:', e));
+          if (pending.length > 0) {
+            // Find the latest order timestamp
+            const latestTime = pending.reduce((max, o) => o.createdAt > max ? o.createdAt : max, "");
+            
+            if (!isInitialLoadRef.current && latestTime > lastOrderTimeRef.current) {
+              if (!isMuted) {
+                playOrderSound();
               }
             }
+            lastOrderTimeRef.current = latestTime;
           }
+          
           isInitialLoadRef.current = false;
-          prevOrderCountRef.current = pending.length;
           setOrders(currentData);
         });
         const unsubMenu = window.POSDatabase.getMenu((data) => setMenuItems(data || []));
@@ -298,9 +308,14 @@
           </div>
           <div className="kds-container">
             {activeTab === 'kds' && (
-              <div className={`sound-toggle ${isMuted ? 'muted' : ''}`} onClick={() => setIsMuted(!isMuted)}>
-                <span style={{fontSize:'20px'}}>{isMuted ? '🔇' : '🔊'}</span>
-                <span>{isMuted ? '提示音：靜音中' : '提示音：已開啟'}</span>
+              <div style={{position:'absolute', top:'20px', right:'40px', display:'flex', gap:'10px', zIndex:10}}>
+                <button onClick={playOrderSound} style={{background:'#fff', border:'2px solid #3498db', padding:'10px 15px', borderRadius:'30px', cursor:'pointer', fontWeight:'bold', color:'#3498db', boxShadow:'0 4px 10px rgba(0,0,0,0.1)'}}>
+                  🔔 測試鈴聲
+                </button>
+                <div className={`sound-toggle ${isMuted ? 'muted' : ''}`} onClick={() => setIsMuted(!isMuted)} style={{position:'static'}}>
+                  <span style={{fontSize:'20px'}}>{isMuted ? '🔇' : '🔊'}</span>
+                  <span>{isMuted ? '提示音：靜音中' : '提示音：已開啟'}</span>
+                </div>
               </div>
             )}
             {activeTab === 'kds' && (
