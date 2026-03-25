@@ -158,8 +158,12 @@ body {
   color: var(--primary-color);
 }
 
-.pos-layout.collapsed .nav-item span {
+.pos-layout.collapsed .nav-item span:not(.icon) {
   display: none;
+}
+
+.pos-layout.collapsed .nav-item .icon {
+  display: inline;
 }
 
 .pos-layout.collapsed .logo {
