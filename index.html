@@ -18,8 +18,40 @@
         try { if (!firebase.apps.length) firebase.initializeApp(firebaseConfig); dbInstance = firebase.firestore(); dbMode = 'firebase'; } catch(e) { console.error(e); }
       }
       const saveOrder = async (orderInfo) => {
-        const newOrder = { ...orderInfo, status: 'pending', createdAt: new Date().toISOString() };
-        if (dbMode === 'firebase') await dbInstance.collection('orders').add(newOrder);
+        const now = new Date();
+        const newOrder = { ...orderInfo, status: 'pending', createdAt: now.toISOString() };
+        if (dbMode === 'firebase') {
+           try {
+             const yy = String(now.getFullYear()).slice(-2);
+             const mm = String(now.getMonth() + 1).padStart(2, '0');
+             const dd = String(now.getDate()).padStart(2, '0');
+             const prefix = `${yy}${mm}${dd}`;
+
+             const startOfDay = new Date();
+             startOfDay.setHours(0,0,0,0);
+             const snapshot = await dbInstance.collection('orders')
+                   .where('createdAt', '>=', startOfDay.toISOString())
+                   .get();
+             
+             let maxSeq = 0;
+             snapshot.forEach(doc => {
+                 const idStr = doc.id;
+                 if(idStr.startsWith(prefix) && idStr.length === 10) {
+                     const seq = parseInt(idStr.substring(6), 10);
+                     if(seq > maxSeq) maxSeq = seq;
+                 }
+             });
+             const nextSeqStr = String(maxSeq + 1).padStart(4, '0');
+             const docId = `${prefix}${nextSeqStr}`;
+             
+             await dbInstance.collection('orders').doc(docId).set(newOrder);
+             return docId;
+           } catch(e) {
+             console.error("Custom ID creation failed, falling back to auto-ID.", e);
+             const res = await dbInstance.collection('orders').add(newOrder);
+             return res.id;
+           }
+        }
       };
       const getMenu = (callback) => {
         if (dbMode === 'firebase') return dbInstance.collection('menu_items').onSnapshot((s) => callback(s.docs.map(doc => ({ ...doc.data(), id: doc.id }))));
@@ -74,6 +106,21 @@
       const [isCartCollapsed, setIsCartCollapsed] = useState(false);
       const [categoryIcons, setCategoryIcons] = useState({});
       const [branding, setBranding] = useState({ name: '德上 POS', logo: '' });
+
+      useEffect(() => {
+        if (branding.name) {
+          document.title = `${branding.name} | POS 前台系統`;
+        }
+        if (branding.logo) {
+          let link = document.querySelector("link[rel~='icon']");
+          if (!link) {
+            link = document.createElement('link');
+            link.rel = 'icon';
+            document.head.appendChild(link);
+          }
+          link.href = branding.logo;
+        }
+      }, [branding.name, branding.logo]);
 
       useEffect(() => {
         const unsubMenu = window.POSDatabase.getMenu(setMenuItems);
@@ -150,8 +197,8 @@
             amountPaid: paymentMethod === '現金' ? Number(amountPaid) : totalAmount,
             change: changeVal > 0 ? changeVal : 0
           };
-          await window.POSDatabase.saveOrder(orderInfo);
-          setLastOrderDetails(orderInfo);
+          const savedId = await window.POSDatabase.saveOrder(orderInfo);
+          setLastOrderDetails({...orderInfo, id: savedId});
           setCart([]);
           setShowCheckout(false);
           setShowSuccessModal(true);
@@ -414,7 +461,10 @@
               <div className="modal-box" style={{textAlign:'center', padding:'40px'}}>
                 <div style={{fontSize:'80px', marginBottom:'20px'}}>✅</div>
                 <h2 style={{marginBottom:'10px', color:'#2f3640'}}>訂單已送出！</h2>
-                <p style={{color:'#7f8fa6', fontSize:'16px', marginBottom:'20px'}}>訂單已同步至廚房看板</p>
+                <p style={{color:'#7f8fa6', fontSize:'16px', marginBottom:'20px'}}>
+                  訂單已同步至廚房看板<br/>
+                  <strong style={{fontSize:'28px', color:'#3498db', marginTop:'15px', display:'inline-block', padding:'10px 20px', background:'#f1f8ff', borderRadius:'10px', border:'2px dashed #3498db'}}>NO. {lastOrderDetails?.id || '---'}</strong>
+                </p>
                 
                 <div style={{textAlign:'left', background:'#f8f9fa', padding:'20px', borderRadius:'12px', marginBottom:'20px'}}>
                   <div style={{fontWeight:'bold', borderBottom:'1px solid #eee', paddingBottom:'10px', marginBottom:'10px', display:'flex', justifyContent:'space-between'}}>
