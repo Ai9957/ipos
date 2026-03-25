@@ -83,10 +83,11 @@
     h2 { font-size: 28px; color: #2f3640; border-bottom: 2px solid #eee; padding-bottom: 15px; margin-bottom: 20px;}
     .input-field { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
     .input-label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
-    .sound-toggle { position: absolute; top: 20px; right: 40px; background: #fff; border: 1px solid #ddd; padding: 10px 20px; border-radius: 30px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.05); z-index: 10; }
+    .sound-toggle { position: absolute; top: 20px; right: 40px; background: #fff; border: 2px solid #2ed573; padding: 10px 25px; border-radius: 30px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.1); z-index: 10; transition: all 0.2s; }
+    .sound-toggle.muted { border-color: #dcdde1; color: #7f8c8d; }
   </style>
 </head>
-<body onClick="(() => { const a = document.getElementById('orderAudio'); if(a) { a.muted = true; a.play().then(() => { a.pause(); a.muted = false; }).catch(() => {}); } })()">
+<body onClick="(() => { const a = document.getElementById('orderAudio'); if(a && a.paused) { a.muted = true; a.play().then(() => { a.pause(); a.muted = false; console.log('Audio unlocked'); }).catch(() => {}); } })()">
   <audio id="orderAudio" src="order.mp3" preload="auto"></audio>
   <div id="root"></div>
   <script type="text/babel">
@@ -162,6 +163,7 @@
       const [isMuted, setIsMuted] = useState(false);
       
       const prevOrderCountRef = useRef(0);
+      const isInitialLoadRef = useRef(true);
 
       useEffect(() => {
         const unsub = window.POSDatabase.getCategoryOrder(setCategoryOrder);
@@ -220,7 +222,7 @@
           const currentData = data || [];
           const pending = currentData.filter(o => o.status === 'pending');
           
-          if (pending.length > prevOrderCountRef.current) {
+          if (!isInitialLoadRef.current && pending.length > prevOrderCountRef.current) {
             if (!isMuted) {
               const audio = document.getElementById('orderAudio');
               if (audio) {
@@ -229,6 +231,7 @@
               }
             }
           }
+          isInitialLoadRef.current = false;
           prevOrderCountRef.current = pending.length;
           setOrders(currentData);
         });
@@ -283,9 +286,9 @@
           </div>
           <div className="kds-container">
             {activeTab === 'kds' && (
-              <div className="sound-toggle" onClick={() => setIsMuted(!isMuted)}>
-                <span style={{fontSize:'20px'}}>{isMuted ? '🔕' : '🔔'}</span>
-                <span>{isMuted ? '靜音模式' : '開啟聲音'}</span>
+              <div className={`sound-toggle ${isMuted ? 'muted' : ''}`} onClick={() => setIsMuted(!isMuted)}>
+                <span style={{fontSize:'20px'}}>{isMuted ? '🔇' : '🔊'}</span>
+                <span>{isMuted ? '提示音：靜音中' : '提示音：已開啟'}</span>
               </div>
             )}
             {activeTab === 'kds' && (
