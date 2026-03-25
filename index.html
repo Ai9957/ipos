@@ -311,21 +311,65 @@
                     <div style={{fontSize:'32px', fontWeight:'bold', color:'var(--primary-color)'}}>${totalAmount}</div>
                   </div>
 
-                  <div style={{marginBottom:'20px'}}>
-                    <div className="modifier-title">點餐類型</div>
-                    <div className="modifier-options">
-                      {uiVisibility.types.map(t => (
-                        <div key={t} className={`mod-option ${orderType === t ? 'active' : ''}`} style={{padding:'12px 25px'}} onClick={() => setOrderType(t)}>{t}</div>
-                      ))}
+                  <div style={{marginBottom:'25px'}}>
+                    <div className="modifier-title" style={{marginBottom:'15px'}}>🛵 點餐類型 (Order Type)</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
+                      {uiVisibility.types.map(t => {
+                         const typeStyles = {
+                           '內用': { icon: '🏠', color: '#1abc9c', bg: '#e8f8f5' },
+                           '外帶': { icon: '🛍️', color: '#f39c12', bg: '#fef5e7' },
+                           '外送': { icon: '🛵', color: '#9b59b6', bg: '#f5eef8' }
+                         };
+                         const style = typeStyles[t] || { icon: '🍽️', color: '#95a5a6', bg: '#f2f4f4' };
+                         const isActive = orderType === t;
+                         return (
+                           <div key={t} onClick={() => setOrderType(t)} style={{
+                              display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                              padding: '12px 25px', borderRadius: '30px', cursor: 'pointer',
+                              border: isActive ? `2px solid ${style.color}` : '1px solid #ddd',
+                              background: isActive ? style.bg : '#fff',
+                              boxShadow: isActive ? `0 4px 12px ${style.color}30` : 'none',
+                              transition: 'all 0.2s',
+                              transform: isActive ? 'scale(1.05)' : 'scale(1)'
+                           }}>
+                              <div style={{ fontSize: '20px', filter: isActive ? 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))' : 'grayscale(100%) opacity(0.5)', transition: 'all 0.2s' }}>{style.icon}</div>
+                              <div style={{ fontSize: '16px', fontWeight: 'bold', color: isActive ? style.color : '#777' }}>
+                                 {t}
+                              </div>
+                           </div>
+                         );
+                      })}
                     </div>
                   </div>
 
                   <div style={{marginBottom:'25px'}}>
-                    <div className="modifier-title">支付方式</div>
-                    <div className="modifier-options">
-                      {uiVisibility.payments.map(p => (
-                        <div key={p} className={`mod-option ${paymentMethod === p ? 'active' : ''}`} style={{padding:'12px 25px'}} onClick={() => setPaymentMethod(p)}>{p}</div>
-                      ))}
+                    <div className="modifier-title" style={{marginBottom:'15px'}}>💳 支付方式 (Payment Method)</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
+                      {uiVisibility.payments.map(p => {
+                         const payStyles = {
+                           '現金': { icon: '💵', color: '#e67e22', bg: '#fdf2e9' },
+                           'LINE Pay': { icon: '📱', color: '#27ae60', bg: '#e9f7ef' },
+                           '信用卡': { icon: '💳', color: '#2980b9', bg: '#eaf2f8' }
+                         };
+                         const style = payStyles[p] || { icon: '💰', color: '#95a5a6', bg: '#f2f4f4' };
+                         const isActive = paymentMethod === p;
+                         return (
+                           <div key={p} onClick={() => setPaymentMethod(p)} style={{
+                              display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                              padding: '12px 25px', borderRadius: '30px', cursor: 'pointer',
+                              border: isActive ? `2px solid ${style.color}` : '1px solid #ddd',
+                              background: isActive ? style.bg : '#fff',
+                              boxShadow: isActive ? `0 4px 12px ${style.color}30` : 'none',
+                              transition: 'all 0.2s',
+                              transform: isActive ? 'scale(1.05)' : 'scale(1)'
+                           }}>
+                              <div style={{ fontSize: '20px', filter: isActive ? 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))' : 'grayscale(100%) opacity(0.5)', transition: 'all 0.2s' }}>{style.icon}</div>
+                              <div style={{ fontSize: '16px', fontWeight: 'bold', color: isActive ? style.color : '#777' }}>
+                                 {p}
+                              </div>
+                           </div>
+                         );
+                      })}
                     </div>
                   </div>
 
