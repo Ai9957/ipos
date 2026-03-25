@@ -67,7 +67,12 @@
       const importDefaultMenu = async (defaultItems) => {
         if (dbMode === 'firebase') { const batch = dbInstance.batch(); defaultItems.forEach(item => batch.set(dbInstance.collection('menu_items').doc(item.id.toString()), item)); await batch.commit(); }
       };
-      return { saveOrder, updateOrderStatus, subscribeToOrders, getMenu, getCategoryOrder, saveCategoryOrder, getItemOrders, saveItemOrders, getKDSSettings, saveKDSSettings, saveMenuItem, deleteMenuItem, importDefaultMenu };
+      return { 
+        saveOrder, updateOrderStatus, subscribeToOrders, getMenu, 
+        getCategoryOrder, saveCategoryOrder, getItemOrders, saveItemOrders, 
+        getKDSSettings, saveKDSSettings, getUIVisibility, saveUIVisibility, 
+        saveMenuItem, deleteMenuItem, importDefaultMenu 
+      };
     })();
   </script>
   <style>
