@@ -47,6 +47,8 @@
       const [itemOrders, setItemOrders] = useState({});
       
       const [showCheckout, setShowCheckout] = useState(false);
+      const [showSuccessModal, setShowSuccessModal] = useState(false);
+      const [lastOrderDetails, setLastOrderDetails] = useState(null);
       const [showOptionsModal, setShowOptionsModal] = useState(null);
       const [selectedOptions, setSelectedOptions] = useState([]);
 
@@ -105,21 +107,23 @@
         if (cart.length === 0) return;
         setIsProcessing(true);
         try {
-          const change = paymentMethod === '現金' ? (Number(amountPaid) - totalAmount) : 0;
-          await window.POSDatabase.saveOrder({ 
+          const changeVal = paymentMethod === '現金' ? (Number(amountPaid) - totalAmount) : 0;
+          const orderInfo = { 
             items: cart.map(i => ({ ...i, title: i.name + (i.options?.length ? ` (${i.options.join(', ')})` : '') })), 
             totalAmount,
             orderType,
             paymentMethod,
             amountPaid: paymentMethod === '現金' ? Number(amountPaid) : totalAmount,
-            change: change > 0 ? change : 0
-          });
+            change: changeVal > 0 ? changeVal : 0
+          };
+          await window.POSDatabase.saveOrder(orderInfo);
+          setLastOrderDetails(orderInfo);
           setCart([]);
           setShowCheckout(false);
+          setShowSuccessModal(true);
           setAmountPaid('');
           setOrderType('內用');
           setPaymentMethod('現金');
-          alert('訂單已送出並同步至廚房看板！🍔');
         } catch (e) {
           alert('結帳失敗：' + e.message);
         } finally {
@@ -297,6 +301,25 @@
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+          {showSuccessModal && (
+            <div className="modal-overlay">
+              <div className="modal-box" style={{textAlign:'center', padding:'40px'}}>
+                <div style={{fontSize:'80px', marginBottom:'20px'}}>✅</div>
+                <h2 style={{marginBottom:'10px', color:'#2f3640'}}>訂單已送出！</h2>
+                <p style={{color:'#7f8fa6', fontSize:'18px', marginBottom:'30px'}}>訂單已同步至廚房看板</p>
+                
+                {lastOrderDetails && lastOrderDetails.paymentMethod === '現金' && (
+                   <div style={{background:'#f8f9fa', padding:'20px', borderRadius:'12px', marginBottom:'30px'}}>
+                      <div style={{fontSize:'14px', color:'#777'}}>應找零金額</div>
+                      <div style={{fontSize:'36px', fontWeight:'bold', color:'var(--primary-color)'}}>${lastOrderDetails.change}</div>
+                   </div>
+                )}
+
+                <button className="btn btn-confirm" style={{width:'100%', height:'70px', fontSize:'24px', borderRadius:'35px'}} onClick={() => setShowSuccessModal(false)}>
+                  完成 (點擊關閉)
+                </button>
               </div>
             </div>
           )}
