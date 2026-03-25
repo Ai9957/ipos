@@ -1089,7 +1089,7 @@
                                      <td style={{padding:'18px 20px', fontWeight:'bold', color:'#2980b9'}}>{getOrderNo(order.id)}</td>
                                      <td style={{padding:'18px 20px'}}><span className="type-badge" style={{background: order.orderType==='外送' ? '#9b59b6' : order.orderType==='外帶' ? '#f39c12' : '#1abc9c', fontSize:'12px', padding:'4px 10px'}}>{order.orderType || '內用'}</span></td>
                                      <td style={{padding:'18px 20px'}}>{order.paymentMethod || 'N/A'}</td>
-                                     <td style={{padding:'18px 20px', fontWeight:'bold', color: duration > 10 ? '#e74c3c' : '#2ecc71'}}>{duration} 分鐘</td>
+                                     <td style={{padding:'18px 20px', fontWeight:'bold', color: duration >= kdsSettings.red ? '#e74c3c' : (duration >= kdsSettings.yellow ? '#f39c12' : '#2ecc71')}}>{duration} 分鐘</td>
                                      <td style={{padding:'18px 20px', fontWeight:'900', color:'#2f3640'}}>${order.totalAmount}</td>
                                      <td style={{padding:'18px 20px'}}>
                                        <button style={{padding:'6px 15px', background:'#badc58', color:'#2f3640', border:'none', borderRadius:'6px', cursor:'pointer', fontWeight:'bold'}} onClick={(e)=>{
