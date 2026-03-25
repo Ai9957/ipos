@@ -259,6 +259,7 @@
       const [settingsSubTab, setSettingsSubTab] = useState('kds'); // kds, visibility, icons
       const [categoryIcons, setCategoryIcons] = useState({});
       const [branding, setBranding] = useState({ name: '德上 POS', logo: 'https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?auto=format&fit=crop&q=80&w=100&h=100' });
+      const [expandedEmojis, setExpandedEmojis] = useState({});
       
       const lastOrderTimeRef = useRef("");
       const isInitialLoadRef = useRef(true);
@@ -852,7 +853,7 @@
                                   />
                                </div>
                                <div style={{display:'flex', flexWrap:'wrap', gap:'5px', justifyContent:'center', padding:'10px', background:'#fff', borderRadius:'10px', border:'1px solid #eee'}}>
-                                  {PRESET_EMOJIS.map(emoji => (
+                                  {(expandedEmojis[cat] ? PRESET_EMOJIS : PRESET_EMOJIS.slice(0, 12)).map(emoji => (
                                      <span 
                                        key={emoji} 
                                        onClick={() => setCategoryIcons({...categoryIcons, [cat]: emoji})}
@@ -863,6 +864,14 @@
                                         {emoji}
                                      </span>
                                   ))}
+                                  <button 
+                                     onClick={() => setExpandedEmojis({...expandedEmojis, [cat]: !expandedEmojis[cat]})}
+                                     style={{width:'100%', padding:'8px', background:'#f0f2f5', border:'none', borderRadius:'8px', marginTop:'5px', cursor:'pointer', color:'#555', fontWeight:'bold', transition:'background 0.2s'}}
+                                     onMouseOver={e => e.currentTarget.style.background = '#e4e6e9'}
+                                     onMouseOut={e => e.currentTarget.style.background = '#f0f2f5'}
+                                  >
+                                     {expandedEmojis[cat] ? '收起 🔼' : '顯示更多 🔽'}
+                                  </button>
                                </div>
                             </div>
                          ))}
