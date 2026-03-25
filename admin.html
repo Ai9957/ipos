@@ -63,7 +63,7 @@
   </script>
   <style>
     .admin-layout { display: flex; height: 100vh; width: 100vw; background: #f5f6fa; overflow: hidden; }
-    .kds-container { flex: 1; padding: 20px 40px; overflow-y: auto; }
+    .kds-container { flex: 1; padding: 20px 40px; overflow-y: auto; position: relative; }
     .nav-item { padding: 15px 20px; font-size: 18px; font-weight: bold; color: #555; cursor: pointer; border-radius: 8px; margin-bottom: 10px; transition: all 0.2s; }
     .nav-item:hover { background: #e1e5ee; }
     .nav-item.active { background: var(--primary-color); color: #fff; }
@@ -83,12 +83,14 @@
     h2 { font-size: 28px; color: #2f3640; border-bottom: 2px solid #eee; padding-bottom: 15px; margin-bottom: 20px;}
     .input-field { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
     .input-label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
+    .sound-toggle { position: absolute; top: 20px; right: 40px; background: #fff; border: 1px solid #ddd; padding: 10px 20px; border-radius: 30px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.05); z-index: 10; }
   </style>
 </head>
-<body>
+<body onClick="(() => { const a = document.getElementById('orderAudio'); if(a) { a.muted = true; a.play().then(() => { a.pause(); a.muted = false; }).catch(() => {}); } })()">
+  <audio id="orderAudio" src="order.mp3" preload="auto"></audio>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState, useEffect, useMemo } = React;
+    const { useState, useEffect, useMemo, useRef } = React;
     const defaultMenuData = [
       { id: 1, name: '經典牛肉堡', price: 120, category: 'burger', image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=200&h=200', hasOptions: false },
       { id: 2, name: '雙層起司堡', price: 150, category: 'burger', image: 'https://images.unsplash.com/photo-1586816001966-79b736744398?auto=format&fit=crop&q=80&w=200&h=200', hasOptions: false },
@@ -157,6 +159,9 @@
       const [itemOrders, setItemOrders] = useState({});
       const [selectedSortCategory, setSelectedSortCategory] = useState('');
       const [kdsSettings, setKdsSettings] = useState({ yellow: 5, red: 10 });
+      const [isMuted, setIsMuted] = useState(false);
+      
+      const prevOrderCountRef = useRef(0);
 
       useEffect(() => {
         const unsub = window.POSDatabase.getCategoryOrder(setCategoryOrder);
@@ -211,10 +216,25 @@
       };
 
       useEffect(() => {
-        const unsubOrders = window.POSDatabase.subscribeToOrders((data) => setOrders(data || []));
+        const unsubOrders = window.POSDatabase.subscribeToOrders((data) => {
+          const currentData = data || [];
+          const pending = currentData.filter(o => o.status === 'pending');
+          
+          if (pending.length > prevOrderCountRef.current) {
+            if (!isMuted) {
+              const audio = document.getElementById('orderAudio');
+              if (audio) {
+                audio.currentTime = 0;
+                audio.play().catch(e => console.warn('Audio play blocked:', e));
+              }
+            }
+          }
+          prevOrderCountRef.current = pending.length;
+          setOrders(currentData);
+        });
         const unsubMenu = window.POSDatabase.getMenu((data) => setMenuItems(data || []));
         return () => { unsubOrders(); unsubMenu(); };
-      }, []);
+      }, [isMuted]);
 
       const getOrderNo = (id) => (id || '').includes('-') ? id.split('-')[1] : (id || '').substring(0, 6);
       const pendingOrders = orders.filter(o => o.status === 'pending');
@@ -262,6 +282,12 @@
             </div>
           </div>
           <div className="kds-container">
+            {activeTab === 'kds' && (
+              <div className="sound-toggle" onClick={() => setIsMuted(!isMuted)}>
+                <span style={{fontSize:'20px'}}>{isMuted ? '🔕' : '🔔'}</span>
+                <span>{isMuted ? '靜音模式' : '開啟聲音'}</span>
+              </div>
+            )}
             {activeTab === 'kds' && (
               <div>
                 <h2>等待製作 ({pendingOrders.length})</h2>
