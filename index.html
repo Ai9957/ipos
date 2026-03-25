@@ -74,14 +74,80 @@
       const getBranding = (callback) => {
         if (dbMode === 'firebase') return dbInstance.collection('settings').doc('branding').onSnapshot((s) => callback(s.exists ? s.data() : { name: '德上 POS', logo: '' }));
       };
-      return { saveOrder, getMenu, getCategoryOrder, getItemOrders, getUIVisibility, getCategoryIcons, getBranding };
+      const saveMenuItem = async (item) => {
+        const data = { ...item }; let id = data.id; delete data.id;
+        if (dbMode === 'firebase') { if(id) await dbInstance.collection('menu_items').doc(String(id)).update(data); else await dbInstance.collection('menu_items').add(data); }
+      };
+      return { 
+        saveOrder, getMenu, getCategoryOrder, getItemOrders, getUIVisibility, getCategoryIcons, getBranding,
+        getStaff: (callback) => {
+          if (dbMode === 'firebase') return dbInstance.collection('settings').doc('staff').onSnapshot((s) => callback(s.exists ? s.data().list : [
+            { id: '1', name: '店長', title: '管理員', pin: '0000', role: 'admin' },
+            { id: '2', name: '小明', title: '組長', pin: '1111', role: 'leader' },
+            { id: '3', name: '小美', title: '收銀員', pin: '2222', role: 'cashier' }
+          ]));
+        }
+      };
     })();
   </script>
 </head>
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState, useEffect, useMemo } = React;
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    function LoginOverlay({ onLogin, staffList, branding }) {
+      const [pin, setPin] = useState('');
+      const [error, setError] = useState('');
+
+      const handleLogin = (digit) => {
+        if (digit === 'del') {
+          setPin(pin.slice(0, -1));
+          setError('');
+          return;
+        }
+        if (pin.length >= 4) return;
+        const newPin = pin + digit;
+        setPin(newPin);
+        
+        if (newPin.length === 4) {
+          const user = staffList.find(s => s.pin === newPin);
+          if (user) {
+            onLogin(user);
+          } else {
+            setError('PIN 碼錯誤，請重新輸入');
+            setTimeout(() => setPin(''), 1000);
+          }
+        }
+      };
+
+      return (
+        <div style={{position:'fixed', inset:0, background:'linear-gradient(135deg, #2c3e50, #1a1a1a)', zIndex:9999, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'#fff', fontFamily:'"Microsoft JhengHei", sans-serif'}}>
+          <img src={branding.logo} style={{width:'80px', height:'80px', borderRadius:'20px', marginBottom:'20px', boxShadow:'0 10px 30px rgba(0,0,0,0.5)'}} />
+          <h1 style={{marginBottom:'10px', fontSize:'32px', fontWeight:'900'}}>{branding.name}</h1>
+          <p style={{color:'rgba(255,255,255,0.6)', marginBottom:'40px', fontSize:'18px'}}>登入解鎖以開啟系統</p>
+          
+          <div style={{display:'flex', gap:'20px', marginBottom:'50px'}}>
+             {[0,1,2,3].map(i => (
+                <div key={i} style={{width:'24px', height:'24px', borderRadius:'50%', border:'2px solid #fff', background: pin.length > i ? '#fff' : 'transparent', transition:'all 0.2s', boxShadow: pin.length > i ? '0 0 15px #fff' : 'none'}}></div>
+             ))}
+          </div>
+
+          {error && <div style={{color:'#ff4757', marginBottom:'30px', fontWeight:'bold', animation:'shake 0.5s'}}>{error}</div>}
+
+          <div style={{display:'grid', gridTemplateColumns:'repeat(3, 90px)', gap:'25px'}}>
+             {[1,2,3,4,5,6,7,8,9].map(n => <button key={n} onClick={() => handleLogin(n.toString())} style={{width:'90px', height:'90px', borderRadius:'50%', border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.05)', color:'#fff', fontSize:'28px', cursor:'pointer', fontWeight:'bold', transition:'all 0.1s'}} onMouseDown={e=>e.target.style.transform='scale(0.9)'} onMouseUp={e=>e.target.style.transform='scale(1)'}>{n}</button>)}
+             <button onClick={() => setPin('')} style={{width:'90px', height:'90px', borderRadius:'50%', border:'none', background:'transparent', color:'#ff4757', fontSize:'20px', cursor:'pointer', fontWeight:'bold'}}>清除</button>
+             <button onClick={() => handleLogin('0')} style={{width:'90px', height:'90px', borderRadius:'50%', border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.05)', color:'#fff', fontSize:'28px', cursor:'pointer', fontWeight:'bold'}} onMouseDown={e=>e.target.style.transform='scale(0.9)'} onMouseUp={e=>e.target.style.transform='scale(1)'}>0</button>
+             <button onClick={() => handleLogin('del')} style={{width:'90px', height:'90px', borderRadius:'50%', border:'none', background:'transparent', color:'#eee', fontSize:'28px', cursor:'pointer'}}>←</button>
+          </div>
+          
+          <style>{`
+            @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-10px); } 40%, 80% { transform: translateX(10px); } }
+          `}</style>
+        </div>
+      );
+    }
 
     function POSApp() {
       const [cart, setCart] = useState([]);
@@ -106,6 +172,14 @@
       const [isCartCollapsed, setIsCartCollapsed] = useState(false);
       const [categoryIcons, setCategoryIcons] = useState({});
       const [branding, setBranding] = useState({ name: '德上 POS', logo: '' });
+      
+      const [staffList, setStaffList] = useState([]);
+      const [currentUser, setCurrentUser] = useState(() => {
+        try {
+          const saved = localStorage.getItem('pos_front_session');
+          return saved ? JSON.parse(saved) : null;
+        } catch (e) { return null; }
+      });
 
       useEffect(() => {
         if (branding.name) {
@@ -129,8 +203,24 @@
         const unsubUIVisibility = window.POSDatabase.getUIVisibility(setUiVisibility);
         const unsubIcons = window.POSDatabase.getCategoryIcons(setCategoryIcons);
         const unsubBranding = window.POSDatabase.getBranding(setBranding);
-        return () => { unsubMenu(); unsubCat(); unsubItemOrders(); unsubUIVisibility(); unsubIcons(); unsubBranding(); };
+        const unsubStaff = window.POSDatabase.getStaff(setStaffList);
+        return () => { unsubMenu(); unsubCat(); unsubItemOrders(); unsubUIVisibility(); unsubIcons(); unsubBranding(); unsubStaff(); };
       }, []);
+
+      const handleUpdateLogin = (user) => {
+        setCurrentUser(user);
+        if (user) {
+          localStorage.setItem('pos_front_session', JSON.stringify(user));
+        } else {
+          localStorage.removeItem('pos_front_session');
+        }
+      };
+
+      const handleLogout = () => {
+        if (confirm('確定要登出並鎖定櫃台系統嗎？')) {
+          handleUpdateLogin(null);
+        }
+      };
 
 
       useEffect(() => {
@@ -220,6 +310,8 @@
       const change = (paymentMethod === '現金' && amountPaid) ? (Number(amountPaid) - totalAmount) : 0;
 
       return (
+        <React.Fragment>
+        {!currentUser && <LoginOverlay onLogin={handleUpdateLogin} staffList={staffList} branding={branding} />}
         <div className={`pos-layout ${isCollapsed ? 'collapsed' : ''} ${isCartCollapsed ? 'cart-collapsed' : ''}`}>
           <div className="side-nav">
             <div className="collapse-btn" onClick={() => setIsCollapsed(!isCollapsed)}>
@@ -252,6 +344,19 @@
                 <span>{cat}</span>
               </div>
             ))}
+            
+            <div style={{ marginTop: 'auto', paddingBottom: '20px', width: '100%', borderTop: '1px solid #eee', paddingTop: '20px' }}>
+              {!isCollapsed && currentUser && (
+                <div style={{display:'flex', alignItems:'center', gap:'10px', padding:'0 20px', marginBottom:'15px'}}>
+                   <div style={{width:'32px', height:'32px', background:'var(--primary-color)', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:'14px', fontWeight:'bold'}}>{currentUser.name[0]}</div>
+                   <div style={{fontSize:'14px', fontWeight:'bold', color:'#333'}}>{currentUser.name}</div>
+                </div>
+              )}
+              <div className="nav-item" onClick={handleLogout} style={{color:'#ff4757'}}>
+                <span className="icon">🚪</span>
+                <span>系統登出</span>
+              </div>
+            </div>
           </div>
 
           <div className="main-content">
@@ -510,6 +615,7 @@
             </div>
           )}
         </div>
+        </React.Fragment>
       );
     }
 
