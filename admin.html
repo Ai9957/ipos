@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>POS 後台與 KDS 廚房看板</title>
+  <title>POS 後台與 KDS 系統</title>
   <link rel="stylesheet" href="index.css">
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -68,8 +68,8 @@
       };
       const getBranding = (callback) => {
         if (dbMode === 'firebase') return dbInstance.collection('settings').doc('branding').onSnapshot((s) => callback(s.exists ? s.data() : { 
-          name: '德上 POS', 
-          logo: 'https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?auto=format&fit=crop&q=80&w=100&h=100' 
+          name: '智慧 POS', 
+          logo: '' 
         }));
       };
       const saveBranding = async (branding) => {
@@ -109,6 +109,27 @@
         },
         saveRolePermissions: async (perms) => {
           if (dbMode === 'firebase') await dbInstance.collection('settings').doc('role_permissions').set({ perms });
+        },
+        getPrinterSettings: (callback) => {
+          if (dbMode === 'firebase') {
+            return dbInstance.collection('settings').doc('printer').onSnapshot((s) => callback(s.exists ? s.data() : {
+              printKitchen: true, kitchenCopies: 1, printCustomer: true, customerCopies: 1
+            }));
+          } else {
+            const emit = () => callback(JSON.parse(localStorage.getItem('pos_printer_settings') || '{"printKitchen":true,"kitchenCopies":1,"printCustomer":true,"customerCopies":1}'));
+            window.addEventListener('storage', emit);
+            window.addEventListener('local-printer-update', emit);
+            emit();
+            return () => { window.removeEventListener('storage', emit); window.removeEventListener('local-printer-update', emit); };
+          }
+        },
+        savePrinterSettings: async (settings) => {
+          if (dbMode === 'firebase') {
+            await dbInstance.collection('settings').doc('printer').set(settings);
+          } else {
+            localStorage.setItem('pos_printer_settings', JSON.stringify(settings));
+            window.dispatchEvent(new CustomEvent('local-printer-update'));
+          }
         }
       };
 
@@ -177,6 +198,12 @@
       box-shadow: 0 2px 5px rgba(0,0,0,0.2);
       text-transform: uppercase;
     }
+    .switch { position: relative; display: inline-block; width: 50px; height: 26px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
+    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+    input:checked + .slider { background-color: var(--primary-color); }
+    input:checked + .slider:before { transform: translateX(24px); }
   </style>
 </head>
 <body onClick="(() => { const a = document.getElementById('orderAudio'); if(a && a.paused) { a.muted = true; a.play().then(() => { a.pause(); a.muted = false; console.log('Audio unlocked'); }).catch(() => {}); } })()">
@@ -321,7 +348,8 @@
       const [isCollapsed, setIsCollapsed] = useState(false);
       const [settingsSubTab, setSettingsSubTab] = useState('kds'); // kds, visibility, icons
       const [categoryIcons, setCategoryIcons] = useState({});
-      const [branding, setBranding] = useState({ name: '德上 POS', logo: 'https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?auto=format&fit=crop&q=80&w=100&h=100' });
+      const [branding, setBranding] = useState({ name: '載入中...', logo: '' });
+      const [printerSettings, setPrinterSettings] = useState({ printKitchen: true, kitchenCopies: 1, printCustomer: true, customerCopies: 1 });
       const [expandedEmojis, setExpandedEmojis] = useState({});
       
       const [historyDate, setHistoryDate] = useState(() => {
@@ -388,6 +416,7 @@
         const unsubBranding = window.POSDatabase.getBranding(setBranding);
         const unsubStaff = window.POSDatabase.getStaff(setStaffList);
         const unsubPerms = window.POSDatabase.getRolePermissions(setRolePermissions);
+        const unsubPrinter = window.POSDatabase.getPrinterSettings ? window.POSDatabase.getPrinterSettings(setPrinterSettings) : null;
         return () => { 
           unsubCatOrder && unsubCatOrder(); 
           unsubItemOrders && unsubItemOrders();
@@ -397,6 +426,7 @@
           unsubBranding && unsubBranding();
           unsubStaff && unsubStaff();
           unsubPerms && unsubPerms();
+          unsubPrinter && unsubPrinter();
         };
       }, []);
 
@@ -740,17 +770,25 @@
             {activeTab === 'kds' && (
               <div>
                 <h2>等待製作 ({pendingOrders.length})</h2>
-                <div className="order-grid">
-                  {pendingOrders.map(order => (
-                    <OrderCard 
-                      key={order.id} 
-                      order={order} 
-                      getOrderNo={getOrderNo} 
-                      kdsSettings={kdsSettings}
-                      onComplete={(id) => window.POSDatabase.updateOrderStatus(id, 'completed')} 
-                    />
-                  ))}
-                </div>
+                {pendingOrders.length === 0 ? (
+                  <div style={{textAlign:'center', padding:'100px 20px', color:'#95a5a6', background:'#fff', borderRadius:'15px', marginTop:'20px'}}>
+                    <div style={{fontSize:'80px', marginBottom:'20px'}}>🍳</div>
+                    <h2 style={{border:'none', color:'#7f8c8d'}}>目前沒有等待製作的訂單</h2>
+                    <p style={{fontSize:'18px'}}>當前台有新訂單進入時，系統會自動更新並播放提示音。</p>
+                  </div>
+                ) : (
+                  <div className="order-grid">
+                    {pendingOrders.map(order => (
+                      <OrderCard 
+                        key={order.id} 
+                        order={order} 
+                        getOrderNo={getOrderNo} 
+                        kdsSettings={kdsSettings}
+                        onComplete={(id) => window.POSDatabase.updateOrderStatus(id, 'completed')} 
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             {activeTab === 'menu' && (
@@ -2016,6 +2054,7 @@
                   <div onClick={() => setSettingsSubTab('visibility')} style={{padding:'10px 20px', cursor:'pointer', fontWeight:'bold', borderBottom: settingsSubTab === 'visibility' ? '4px solid var(--primary-color)' : 'none', color: settingsSubTab === 'visibility' ? 'var(--primary-color)' : '#666', whiteSpace:'nowrap'}}>結帳介面控制</div>
                   <div onClick={() => setSettingsSubTab('icons')} style={{padding:'10px 20px', cursor:'pointer', fontWeight:'bold', borderBottom: settingsSubTab === 'icons' ? '4px solid var(--primary-color)' : 'none', color: settingsSubTab === 'icons' ? 'var(--primary-color)' : '#666', whiteSpace:'nowrap'}}>分類圖示管理</div>
                   <div onClick={() => setSettingsSubTab('branding')} style={{padding:'10px 20px', cursor:'pointer', fontWeight:'bold', borderBottom: settingsSubTab === 'branding' ? '4px solid var(--primary-color)' : 'none', color: settingsSubTab === 'branding' ? 'var(--primary-color)' : '#666', whiteSpace:'nowrap'}}>品牌視覺設定</div>
+                  <div onClick={() => setSettingsSubTab('printer')} style={{padding:'10px 20px', cursor:'pointer', fontWeight:'bold', borderBottom: settingsSubTab === 'printer' ? '4px solid var(--primary-color)' : 'none', color: settingsSubTab === 'printer' ? 'var(--primary-color)' : '#666', whiteSpace:'nowrap'}}>出單機設定 🖨️</div>
                 </div>
 
                 <div style={{background:'#fff', padding:'40px', borderRadius:'15px', maxWidth:'800px', boxShadow:'0 4px 15px rgba(0,0,0,0.05)'}}>
@@ -2147,7 +2186,7 @@
                                  className="input-field" 
                                  value={branding.name} 
                                  onChange={e => setBranding({...branding, name: e.target.value})} 
-                                 placeholder="例如：德上快餐店"
+                                 placeholder="例如：王小明快餐店"
                                />
                             </div>
                             <div style={{marginBottom:'20px'}}>
@@ -2170,7 +2209,7 @@
                                  ? <img src={branding.logo} style={{width:'45px', height:'45px', borderRadius:'8px', objectFit:'cover', background:'#eee'}} />
                                  : <span style={{fontSize:'36px'}}>🍟</span>
                                }
-                               <span style={{fontSize:'20px', fontWeight:'bold', color:'var(--primary-color)'}}>{branding.name || '德上 POS'}</span>
+                               <span style={{fontSize:'20px', fontWeight:'bold', color:'var(--primary-color)'}}>{branding.name || '智慧 POS'}</span>
                             </div>
                          </div>
                       </div>
@@ -2178,9 +2217,83 @@
                       <button onClick={handleSaveBranding} className="btn-done" style={{background: 'var(--primary-color)', width:'100%'}}>儲存品牌設定</button>
                     </div>
                   )}
+
+                  {settingsSubTab === 'printer' && (
+                    <div className="settings-section">
+                      <div className="section-header" style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'25px'}}>
+                         <div style={{width:'4px', height:'24px', background:'var(--primary-color)', borderRadius:'2px'}}></div>
+                         <h2 style={{margin:0}}>出單機與打印設定 (Printer Settings)</h2>
+                      </div>
+                      <p style={{color:'#777', marginBottom:'25px'}}>設定結帳單與廚房單的打印邏輯。您可以設定是否打印以及各單據的份數。</p>
+                      
+                      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'30px', marginBottom:'30px'}}>
+                         {/* Customer Receipt Settings */}
+                         <div style={{background:'#f8f9fa', padding:'25px', borderRadius:'15px', border:'1px solid #eee'}}>
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
+                               <h3 style={{margin:0, fontSize:'18px'}}>🧾 顧客小票 (Receipt)</h3>
+                               <label className="switch" style={{position:'relative', display:'inline-block', width:'50px', height:'26px'}}>
+                                  <input type="checkbox" checked={printerSettings.printCustomer} onChange={e => setPrinterSettings({...printerSettings, printCustomer: e.target.checked})} />
+                                  <span className="slider round"></span>
+                               </label>
+                            </div>
+                            <div style={{opacity: printerSettings.printCustomer ? 1 : 0.5, transition:'opacity 0.2s'}}>
+                               <label className="input-label">打印份數</label>
+                               <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
+                                  <input 
+                                    type="number" 
+                                    className="input-field" 
+                                    min="1" 
+                                    max="5" 
+                                    value={printerSettings.customerCopies} 
+                                    disabled={!printerSettings.printCustomer}
+                                    onChange={e => setPrinterSettings({...printerSettings, customerCopies: parseInt(e.target.value) || 1})} 
+                                  />
+                                  <span style={{color:'#777'}}>份</span>
+                               </div>
+                               <p style={{color:'#999', fontSize:'12px', marginTop:'10px'}}>有些餐廳會多打印一份顧客小票留存對帳。</p>
+                            </div>
+                         </div>
+
+                         {/* Kitchen Slip Settings */}
+                         <div style={{background:'#f8f9fa', padding:'25px', borderRadius:'15px', border:'1px solid #eee'}}>
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
+                               <h3 style={{margin:0, fontSize:'18px'}}>👨‍🍳 廚房製作單 (Kitchen Slip)</h3>
+                               <label className="switch" style={{position:'relative', display:'inline-block', width:'50px', height:'26px'}}>
+                                  <input type="checkbox" checked={printerSettings.printKitchen} onChange={e => setPrinterSettings({...printerSettings, printKitchen: e.target.checked})} />
+                                  <span className="slider round"></span>
+                               </label>
+                            </div>
+                            <div style={{opacity: printerSettings.printKitchen ? 1 : 0.5, transition:'opacity 0.2s'}}>
+                               <label className="input-label">打印份數</label>
+                               <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
+                                  <input 
+                                    type="number" 
+                                    className="input-field" 
+                                    min="1" 
+                                    max="5" 
+                                    value={printerSettings.kitchenCopies} 
+                                    disabled={!printerSettings.printKitchen}
+                                    onChange={e => setPrinterSettings({...printerSettings, kitchenCopies: parseInt(e.target.value) || 1})} 
+                                  />
+                                  <span style={{color:'#777'}}>份</span>
+                               </div>
+                               <p style={{color:'#999', fontSize:'12px', marginTop:'10px'}}>若有多區域廚房分單需求，可增加份數。</p>
+                            </div>
+                         </div>
+                      </div>
+
+                      <button onClick={async () => {
+                        try {
+                          await window.POSDatabase.savePrinterSettings(printerSettings);
+                          showModal('出單機設定儲存成功！');
+                        } catch(e) { showModal('儲存失敗：' + e.message, 'error'); }
+                      }} className="btn-done" style={{background: 'var(--primary-color)', width:'100%'}}>儲存出單設定</button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
+
           </div>
 
           {confirmReturnOrder && (

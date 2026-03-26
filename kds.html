@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>廚房顯示系統 (KDS) | 獨立看板</title>
+  <title>KDS 系統</title>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -13,7 +13,7 @@
   <style>
     :root { --primary-color: #f75c03; --bg-color: #f1f2f6; }
     body { font-family: "Microsoft JhengHei", sans-serif; background: var(--bg-color); margin: 0; padding: 20px; overflow-x: hidden; }
-    .kds-header { display: flex; justify-content: space-between; alignItems: center; margin-bottom: 25px; padding: 15px 30px; background: #fff; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+    .kds-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding: 15px 30px; background: #fff; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
     .clock { font-size: 24px; font-weight: 900; color: #2c3e50; font-family: monospace; }
     
     .order-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
@@ -62,6 +62,9 @@
         },
         getKDSSettings: (callback) => {
           return dbInstance.collection('settings').doc('kds_settings').onSnapshot(s => callback(s.exists ? s.data() : { yellow: 5, red: 10 }));
+        },
+        getBranding: (callback) => {
+          return dbInstance.collection('settings').doc('branding').onSnapshot(s => callback(s.exists ? s.data() : { name: '智慧 POS', logo: '' }));
         }
       };
     })();
@@ -117,6 +120,7 @@
     function KDSApp() {
       const [orders, setOrders] = useState([]);
       const [kdsSettings, setKdsSettings] = useState({ yellow: 5, red: 10 });
+      const [branding, setBranding] = useState({ name: '載入中...', logo: '' });
       const [isMuted, setIsMuted] = useState(false);
       const [time, setTime] = useState(new Date());
       const lastOrderTimeRef = useRef("");
@@ -131,8 +135,15 @@
       };
 
       useEffect(() => {
+        if (branding.name) {
+          document.title = `${branding.name} | KDS 廚房看板`;
+        }
+      }, [branding.name]);
+
+      useEffect(() => {
         const timer = setInterval(() => setTime(new Date()), 1000);
         const unsubSettings = POSDatabase.getKDSSettings(setKdsSettings);
+        const unsubBranding = POSDatabase.getBranding(setBranding);
         const unsubOrders = POSDatabase.subscribeToOrders((data) => {
           const currentData = data || [];
           const pending = currentData.filter(o => o.status === 'pending');
@@ -149,7 +160,7 @@
           setOrders(currentData);
         });
 
-        return () => { clearInterval(timer); unsubSettings(); unsubOrders(); };
+        return () => { clearInterval(timer); unsubSettings(); unsubBranding(); unsubOrders(); };
       }, [isMuted]);
 
       const pendingOrders = orders.filter(o => o.status === 'pending');
@@ -158,7 +169,7 @@
         <div>
           <header className="kds-header">
             <div>
-              <h1 style={{margin:0, fontSize:'28px', color:'#2c3e50'}}>👨‍🍳 廚房製作看板 (Pending: {pendingOrders.length})</h1>
+              <h1 style={{margin:0, fontSize:'28px', color:'#2c3e50'}}>👨‍🍳 {branding.name} 看板 (Pending: {pendingOrders.length})</h1>
               <div style={{color:'#777', marginTop:'5px'}}>即時同步櫃台訂單，無須登入即可查看。</div>
             </div>
             <div className="status-bar">

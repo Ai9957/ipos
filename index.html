@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>🍟 德上快餐店 POS 系統</title>
+  <title>POS 系統</title>
   <link rel="stylesheet" href="index.css">
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -72,14 +72,27 @@
         if (dbMode === 'firebase') return dbInstance.collection('settings').doc('category_icons').onSnapshot((s) => callback(s.exists ? s.data() : {}));
       };
       const getBranding = (callback) => {
-        if (dbMode === 'firebase') return dbInstance.collection('settings').doc('branding').onSnapshot((s) => callback(s.exists ? s.data() : { name: '德上 POS', logo: '' }));
+        if (dbMode === 'firebase') return dbInstance.collection('settings').doc('branding').onSnapshot((s) => callback(s.exists ? s.data() : { name: '智慧 POS', logo: '' }));
+      };
+      const getPrinterSettings = (callback) => {
+        if (dbMode === 'firebase') {
+          return dbInstance.collection('settings').doc('printer').onSnapshot((s) => callback(s.exists ? s.data() : {
+            printKitchen: true, kitchenCopies: 1, printCustomer: true, customerCopies: 1
+          }));
+        } else {
+          const emit = () => callback(JSON.parse(localStorage.getItem('pos_printer_settings') || '{"printKitchen":true,"kitchenCopies":1,"printCustomer":true,"customerCopies":1}'));
+          window.addEventListener('storage', (e) => { if(e.key === 'pos_printer_settings') emit(); });
+          window.addEventListener('local-printer-update', emit);
+          emit();
+          return () => { window.removeEventListener('storage', emit); window.removeEventListener('local-printer-update', emit); };
+        }
       };
       const saveMenuItem = async (item) => {
         const data = { ...item }; let id = data.id; delete data.id;
         if (dbMode === 'firebase') { if(id) await dbInstance.collection('menu_items').doc(String(id)).update(data); else await dbInstance.collection('menu_items').add(data); }
       };
       return { 
-        saveOrder, getMenu, getCategoryOrder, getItemOrders, getUIVisibility, getCategoryIcons, getBranding,
+        saveOrder, getMenu, getCategoryOrder, getItemOrders, getUIVisibility, getCategoryIcons, getBranding, getPrinterSettings,
         getStaff: (callback) => {
           if (dbMode === 'firebase') return dbInstance.collection('settings').doc('staff').onSnapshot((s) => callback(s.exists ? s.data().list : [
             { id: '1', name: '店長', title: '管理員', pin: '0000', role: 'admin' },
@@ -172,7 +185,8 @@
       const [isCollapsed, setIsCollapsed] = useState(false);
       const [isCartCollapsed, setIsCartCollapsed] = useState(false);
       const [categoryIcons, setCategoryIcons] = useState({});
-      const [branding, setBranding] = useState({ name: '德上 POS', logo: '' });
+      const [branding, setBranding] = useState({ name: '載入中...', logo: '' });
+      const [printerSettings, setPrinterSettings] = useState({ printKitchen: true, kitchenCopies: 1, printCustomer: true, customerCopies: 1 });
       
       const [staffList, setStaffList] = useState([]);
       const [currentUser, setCurrentUser] = useState(() => {
@@ -205,7 +219,17 @@
         const unsubIcons = window.POSDatabase.getCategoryIcons(setCategoryIcons);
         const unsubBranding = window.POSDatabase.getBranding(setBranding);
         const unsubStaff = window.POSDatabase.getStaff(setStaffList);
-        return () => { unsubMenu(); unsubCat(); unsubItemOrders(); unsubUIVisibility(); unsubIcons(); unsubBranding(); unsubStaff(); };
+        const unsubPrinter = window.POSDatabase.getPrinterSettings ? window.POSDatabase.getPrinterSettings(setPrinterSettings) : null;
+        return () => { 
+          unsubMenu && unsubMenu(); 
+          unsubCat && unsubCat(); 
+          unsubItemOrders && unsubItemOrders(); 
+          unsubUIVisibility && unsubUIVisibility(); 
+          unsubIcons && unsubIcons(); 
+          unsubBranding && unsubBranding(); 
+          unsubStaff && unsubStaff(); 
+          unsubPrinter && unsubPrinter(); 
+        };
       }, []);
 
       const handleUpdateLogin = (user) => {
@@ -286,84 +310,98 @@
         const displayId = order.id ? (order.id.length > 8 ? order.id.slice(-4) : order.id) : '---';
 
         // 1. Customer Receipt (iCHEF Style)
-        let customerHtml = `
-          <div class="print-ticket">
-            <div class="print-header">
-              <div class="print-title">${branding.name}</div>
-              <div style="font-size: 13px; font-weight: bold; letter-spacing: 2px;">客戶結帳聯</div>
-            </div>
-            
-            <div style="text-align: center; border: 2px solid #000; margin-bottom: 12px; padding: 8px 0; border-radius: 8px;">
-               <div style="font-size: 14px; font-weight: bold; margin-bottom: 2px;">取餐叫號 (No)</div>
-               <div style="font-size: 48px; font-weight: 900; line-height: 1;">${displayId}</div>
-            </div>
+        let customerHtml = "";
+        if (printerSettings.printCustomer) {
+          const content = `
+            <div class="print-ticket">
+              <div class="print-header">
+                <div class="print-title">${branding.name}</div>
+                <div style="font-size: 13px; font-weight: bold; letter-spacing: 2px;">客戶結帳聯</div>
+              </div>
+              
+              <div style="text-align: center; border: 2px solid #000; margin-bottom: 12px; padding: 8px 0; border-radius: 8px;">
+                 <div style="font-size: 14px; font-weight: bold; margin-bottom: 2px;">取餐叫號 (No)</div>
+                 <div style="font-size: 48px; font-weight: 900; line-height: 1;">${displayId}</div>
+              </div>
 
-            <div class="print-info"><span>訂單單號:</span> #<strong>${order.id}</strong></div>
-            <div class="print-info"><span>交易時間:</span> ${timeStr}</div>
-            <div class="print-info"><span>桌號類型:</span> <strong>${order.orderType}</strong></div>
-            <div class="print-info"><span>服務人員:</span> ${currentUser?.name || 'POS'}</div>
-            
-            <div style="margin: 10px 0;">
-              <div class="print-items-head">
-                <span>品項內容 / 數量</span>
-                <span>金額</span>
+              <div class="print-info"><span>訂單單號:</span> #<strong>${order.id}</strong></div>
+              <div class="print-info"><span>交易時間:</span> ${timeStr}</div>
+              <div class="print-info"><span>桌號類型:</span> <strong>${order.orderType}</strong></div>
+              <div class="print-info"><span>服務人員:</span> ${currentUser?.name || 'POS'}</div>
+              
+              <div style="margin: 10px 0;">
+                <div class="print-items-head">
+                  <span>品項內容 / 數量</span>
+                  <span>金額</span>
+                </div>
+                <div class="print-items">
+                  ${order.items.map(i => `
+                    <div class="print-item">
+                      <span>${i.name} x ${i.quantity}</span>
+                      <span>$${i.price * i.quantity}</span>
+                    </div>
+                    ${i.options?.length ? `<div class="print-item-notes">▫️ ${i.options.join(', ')}</div>` : ''}
+                  `).join('')}
+                </div>
               </div>
-              <div class="print-items">
-                ${order.items.map(i => `
-                  <div class="print-item">
-                    <span>${i.name} x ${i.quantity}</span>
-                    <span>$${i.price * i.quantity}</span>
-                  </div>
-                  ${i.options?.length ? `<div class="print-item-notes">▫️ ${i.options.join(', ')}</div>` : ''}
-                `).join('')}
+              
+              <div class="print-total-section">
+                <div class="print-info"><span>小計金額:</span> $${order.totalAmount}</div>
+                <div class="print-total">總計金額: $${order.totalAmount}</div>
+              </div>
+              
+              <div style="margin-top: 10px; border-top: 1px dashed #000; padding-top: 8px;">
+                <div class="print-info"><span>付款方式:</span> ${order.paymentMethod}</div>
+                ${order.paymentMethod === '現金' ? `
+                  <div class="print-info"><span>實收現金:</span> $${order.amountPaid}</div>
+                  <div class="print-info"><span>找零金額:</span> $${order.change}</div>
+                ` : ''}
+              </div>
+              
+              <div style="text-align: center; margin-top: 25px; font-size: 11px;">
+                <div style="margin-bottom: 5px; font-weight: bold;">*** 謝謝惠顧 (THANK YOU) ***</div>
+                <div>請憑此單據取餐，遺失不補發</div>
               </div>
             </div>
-            
-            <div class="print-total-section">
-              <div class="print-info"><span>小計金額:</span> $${order.totalAmount}</div>
-              <div class="print-total">總計金額: $${order.totalAmount}</div>
-            </div>
-            
-            <div style="margin-top: 10px; border-top: 1px dashed #000; padding-top: 8px;">
-              <div class="print-info"><span>付款方式:</span> ${order.paymentMethod}</div>
-              ${order.paymentMethod === '現金' ? `
-                <div class="print-info"><span>實收現金:</span> $${order.amountPaid}</div>
-                <div class="print-info"><span>找零金額:</span> $${order.change}</div>
-              ` : ''}
-            </div>
-            
-            <div style="text-align: center; margin-top: 25px; font-size: 11px;">
-              <div style="margin-bottom: 5px; font-weight: bold;">*** 謝謝惠顧 (THANK YOU) ***</div>
-              <div>請憑此單據取餐，遺失不補發</div>
-            </div>
-          </div>
-        `;
+          `;
+          for(let i=0; i < (printerSettings.customerCopies || 1); i++) {
+            customerHtml += content;
+          }
+        }
 
         // 2. Kitchen Ticket (Work Slip)
-        let kitchenHtml = `
-          <div class="print-ticket">
-            <div class="kitchen-ticket">
-              <div style="font-size: 16px; font-weight: 800; text-align: center;">- 廚房製作聯 -</div>
-              <div class="kitchen-no">NO. ${displayId}</div>
-              <div class="print-info" style="font-size: 18px;">
-                <span>類型: ${order.orderType}</span>
-                <span>${new Date().toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit'})}</span>
-              </div>
-              <div style="margin-top: 15px;">
-                ${order.items.map(i => `
-                  <div class="kitchen-item">
-                    <div class="kitchen-item-row">
-                      <div class="kitchen-qty">${i.quantity}</div>
-                      <div class="kitchen-item-name">${i.name}</div>
+        let kitchenHtml = "";
+        if (printerSettings.printKitchen) {
+          const content = `
+            <div class="print-ticket">
+              <div class="kitchen-ticket">
+                <div style="font-size: 16px; font-weight: 800; text-align: center;">- 廚房製作聯 -</div>
+                <div class="kitchen-no">NO. ${displayId}</div>
+                <div class="print-info" style="font-size: 18px;">
+                  <span>類型: ${order.orderType}</span>
+                  <span>${new Date().toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit'})}</span>
+                </div>
+                <div style="margin-top: 15px;">
+                  ${order.items.map(i => `
+                    <div class="kitchen-item">
+                      <div class="kitchen-item-row">
+                        <div class="kitchen-qty">${i.quantity}</div>
+                        <div class="kitchen-item-name">${i.name}</div>
+                      </div>
+                      ${i.options?.length ? `<div class="kitchen-notes">${i.options.join(', ')}</div>` : ''}
                     </div>
-                    ${i.options?.length ? `<div class="kitchen-notes">${i.options.join(', ')}</div>` : ''}
-                  </div>
-                `).join('')}
+                  `).join('')}
+                </div>
               </div>
+              <div style="text-align:right; font-size:12px; margin-top:5px;">列印序號: ${order.id}</div>
             </div>
-            <div style="text-align:right; font-size:12px; margin-top:5px;">列印序號: ${order.id}</div>
-          </div>
-        `;
+          `;
+          for(let i=0; i < (printerSettings.kitchenCopies || 1); i++) {
+            kitchenHtml += content;
+          }
+        }
+
+        if (!customerHtml && !kitchenHtml) return;
 
         printArea.innerHTML = customerHtml + kitchenHtml;
         window.print();
@@ -434,7 +472,7 @@
                       />
                     : <span style={{fontSize:'40px'}}>🍟</span>
                   }
-                  <span style={{fontSize:'15px', fontWeight:'bold', textAlign:'center', lineHeight:'1.3'}}>{branding.name || '德上 POS'}</span>
+                  <span style={{fontSize:'15px', fontWeight:'bold', textAlign:'center', lineHeight:'1.3'}}>{branding.name}</span>
                 </div>
               )}
             </div>
