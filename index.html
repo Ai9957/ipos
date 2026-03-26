@@ -92,6 +92,7 @@
   </script>
 </head>
 <body>
+  <div id="print-area"></div>
   <div id="root"></div>
   <script type="text/babel">
     const { useState, useEffect, useMemo, useRef } = React;
@@ -274,6 +275,101 @@
 
       const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
+      const printOrder = (order) => {
+        const printArea = document.getElementById('print-area');
+        if (!printArea) return;
+
+        const now = new Date();
+        const timeStr = now.toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' }) + ' ' + 
+                       now.toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit' });
+        
+        const displayId = order.id ? (order.id.length > 8 ? order.id.slice(-4) : order.id) : '---';
+
+        // 1. Customer Receipt (iCHEF Style)
+        let customerHtml = `
+          <div class="print-ticket">
+            <div class="print-header">
+              <div class="print-title">${branding.name}</div>
+              <div style="font-size: 13px; font-weight: bold; letter-spacing: 2px;">客戶結帳聯</div>
+            </div>
+            
+            <div style="text-align: center; border: 2px solid #000; margin-bottom: 12px; padding: 8px 0; border-radius: 8px;">
+               <div style="font-size: 14px; font-weight: bold; margin-bottom: 2px;">取餐叫號 (No)</div>
+               <div style="font-size: 48px; font-weight: 900; line-height: 1;">${displayId}</div>
+            </div>
+
+            <div class="print-info"><span>訂單單號:</span> #<strong>${order.id}</strong></div>
+            <div class="print-info"><span>交易時間:</span> ${timeStr}</div>
+            <div class="print-info"><span>桌號類型:</span> <strong>${order.orderType}</strong></div>
+            <div class="print-info"><span>服務人員:</span> ${currentUser?.name || 'POS'}</div>
+            
+            <div style="margin: 10px 0;">
+              <div class="print-items-head">
+                <span>品項內容 / 數量</span>
+                <span>金額</span>
+              </div>
+              <div class="print-items">
+                ${order.items.map(i => `
+                  <div class="print-item">
+                    <span>${i.name} x ${i.quantity}</span>
+                    <span>$${i.price * i.quantity}</span>
+                  </div>
+                  ${i.options?.length ? `<div class="print-item-notes">▫️ ${i.options.join(', ')}</div>` : ''}
+                `).join('')}
+              </div>
+            </div>
+            
+            <div class="print-total-section">
+              <div class="print-info"><span>小計金額:</span> $${order.totalAmount}</div>
+              <div class="print-total">總計金額: $${order.totalAmount}</div>
+            </div>
+            
+            <div style="margin-top: 10px; border-top: 1px dashed #000; padding-top: 8px;">
+              <div class="print-info"><span>付款方式:</span> ${order.paymentMethod}</div>
+              ${order.paymentMethod === '現金' ? `
+                <div class="print-info"><span>實收現金:</span> $${order.amountPaid}</div>
+                <div class="print-info"><span>找零金額:</span> $${order.change}</div>
+              ` : ''}
+            </div>
+            
+            <div style="text-align: center; margin-top: 25px; font-size: 11px;">
+              <div style="margin-bottom: 5px; font-weight: bold;">*** 謝謝惠顧 (THANK YOU) ***</div>
+              <div>請憑此單據取餐，遺失不補發</div>
+            </div>
+          </div>
+        `;
+
+        // 2. Kitchen Ticket (Work Slip)
+        let kitchenHtml = `
+          <div class="print-ticket">
+            <div class="kitchen-ticket">
+              <div style="font-size: 16px; font-weight: 800; text-align: center;">- 廚房製作聯 -</div>
+              <div class="kitchen-no">NO. ${displayId}</div>
+              <div class="print-info" style="font-size: 18px;">
+                <span>類型: ${order.orderType}</span>
+                <span>${new Date().toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit'})}</span>
+              </div>
+              <div style="margin-top: 15px;">
+                ${order.items.map(i => `
+                  <div class="kitchen-item">
+                    <div class="kitchen-item-row">
+                      <div class="kitchen-qty">${i.quantity}</div>
+                      <div class="kitchen-item-name">${i.name}</div>
+                    </div>
+                    ${i.options?.length ? `<div class="kitchen-notes">${i.options.join(', ')}</div>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+            <div style="text-align:right; font-size:12px; margin-top:5px;">列印序號: ${order.id}</div>
+          </div>
+        `;
+
+        printArea.innerHTML = customerHtml + kitchenHtml;
+        window.print();
+        printArea.innerHTML = '';
+      };
+
       const handleCheckout = async () => {
         if (cart.length === 0) return;
         setIsProcessing(true);
@@ -288,13 +384,17 @@
             change: changeVal > 0 ? changeVal : 0
           };
           const savedId = await window.POSDatabase.saveOrder(orderInfo);
-          setLastOrderDetails({...orderInfo, id: savedId});
+          const completeOrder = { ...orderInfo, id: savedId };
+          setLastOrderDetails(completeOrder);
           setCart([]);
           setShowCheckout(false);
           setShowSuccessModal(true);
           setAmountPaid('');
           setOrderType('內用');
           setPaymentMethod('現金');
+          
+          // Trigger Print
+          setTimeout(() => printOrder(completeOrder), 500);
         } catch (e) {
           alert('結帳失敗：' + e.message);
         } finally {
