@@ -99,7 +99,17 @@
         saveStaff: async (list) => {
           if (dbMode === 'firebase') await dbInstance.collection('settings').doc('staff').set({ list });
         },
-        saveMenuItem, deleteMenuItem, importDefaultMenu 
+        saveMenuItem, deleteMenuItem, importDefaultMenu,
+        getRolePermissions: (callback) => {
+          if (dbMode === 'firebase') return dbInstance.collection('settings').doc('role_permissions').onSnapshot((s) => callback(s.exists ? s.data().perms : {
+            admin: ['kds', 'menu', 'categories', 'dashboard', 'analytics', 'history', 'staff', 'settings'],
+            leader: ['kds', 'dashboard', 'analytics', 'history'],
+            cashier: []
+          }));
+        },
+        saveRolePermissions: async (perms) => {
+          if (dbMode === 'firebase') await dbInstance.collection('settings').doc('role_permissions').set({ perms });
+        }
       };
 
     })();
@@ -336,8 +346,9 @@
       const [rolePermissions, setRolePermissions] = useState({
         admin: ['kds', 'menu', 'categories', 'dashboard', 'analytics', 'history', 'staff', 'settings'],
         leader: ['kds', 'dashboard', 'analytics', 'history'],
-        cashier: [] // Generally means no admin access
+        cashier: []
       });
+      const [showRoleModal, setShowRoleModal] = useState(false);
       
       const lastOrderTimeRef = useRef("");
       const isInitialLoadRef = useRef(true);
@@ -368,7 +379,6 @@
           link.href = branding.logo;
         }
       }, [branding.name, branding.logo]);
-
       useEffect(() => {
         const unsubCatOrder = window.POSDatabase.getCategoryOrder(setCategoryOrder);
         const unsubItemOrders = window.POSDatabase.getItemOrders(setItemOrders);
@@ -377,6 +387,7 @@
         const unsubCategoryIcons = window.POSDatabase.getCategoryIcons(setCategoryIcons);
         const unsubBranding = window.POSDatabase.getBranding(setBranding);
         const unsubStaff = window.POSDatabase.getStaff(setStaffList);
+        const unsubPerms = window.POSDatabase.getRolePermissions(setRolePermissions);
         return () => { 
           unsubCatOrder && unsubCatOrder(); 
           unsubItemOrders && unsubItemOrders();
@@ -385,6 +396,7 @@
           unsubCategoryIcons && unsubCategoryIcons();
           unsubBranding && unsubBranding();
           unsubStaff && unsubStaff();
+          unsubPerms && unsubPerms();
         };
       }, []);
 
@@ -1842,11 +1854,16 @@
                   <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'30px', borderBottom:'1px solid #eee', paddingBottom:'20px'}}>
                      <div>
                         <h2 style={{border:'none', margin:0, padding:0, fontSize:'28px', marginBottom:'5px'}}>👥 人員權限與登入管理</h2>
-                        <div style={{color:'#777'}}>設定店內員工清單、PIN 碼以及在系統中扮演的角色權限。</div>
+                        <div style={{color:'#777'}}>設定店內員工清單、PIN 碼以及自定義不同角色的功能存取權限。</div>
                      </div>
-                     <button onClick={() => setEditingStaff({ id: Date.now().toString(), name: '', title: '新員工', pin: '', role: 'cashier' })} style={{background:'var(--primary-color)', color:'#fff', border:'none', padding:'12px 25px', borderRadius:'10px', fontWeight:'bold', cursor:'pointer', display:'flex', alignItems:'center', gap:'8px'}}>
-                       ➕ 新增人員
-                     </button>
+                     <div style={{display:'flex', gap:'12px'}}>
+                        <button onClick={() => setShowRoleModal(true)} style={{background:'#f1f2f6', color:'#2c3e50', border:'1px solid #ddd', padding:'12px 25px', borderRadius:'10px', fontWeight:'bold', cursor:'pointer', display:'flex', alignItems:'center', gap:'8px'}}>
+                           🗝️ 權限角色設定
+                        </button>
+                        <button onClick={() => setEditingStaff({ id: Date.now().toString(), name: '', title: '新員工', pin: '', role: 'cashier' })} style={{background:'var(--primary-color)', color:'#fff', border:'none', padding:'12px 25px', borderRadius:'10px', fontWeight:'bold', cursor:'pointer', display:'flex', alignItems:'center', gap:'8px'}}>
+                           ➕ 新增人員
+                        </button>
+                     </div>
                   </div>
 
                   <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px, 1fr))', gap:'25px'}}>
@@ -1904,9 +1921,9 @@
                           <div style={{marginBottom:'30px'}}>
                              <label className="input-label">系統權限角色</label>
                              <select className="input-field" value={editingStaff.role} onChange={e=>setEditingStaff({...editingStaff, role: e.target.value})}>
-                                <option value="admin">管理員 (Admin) - 全部功能</option>
-                                <option value="leader">組長 (Leader) - 看板/統計/歷史</option>
-                                <option value="cashier">收銀員 (Cashier) - 僅限前台</option>
+                                <option value="admin">管理員 (Admin) - 自定義權限</option>
+                                <option value="leader">組長 (Leader) - 自定義權限</option>
+                                <option value="cashier">收銀員 (Cashier) - 自定義權限</option>
                              </select>
                           </div>
                           <div style={{display:'flex', gap:'15px'}}>
@@ -1924,6 +1941,67 @@
                              }} style={{flex:1, padding:'15px', background:'var(--primary-color)', color:'#fff', border:'none', borderRadius:'10px', cursor:'pointer', fontWeight:'bold'}}>儲存設定</button>
                           </div>
                        </div>
+                    </div>
+                  )}
+
+                  {/* Role Permissions Customization Modal */}
+                  {showRoleModal && (
+                    <div className="modal-overlay">
+                      <div className="modal-box" style={{width:'800px', maxWidth:'95vw'}}>
+                         <div className="modal-header">權限角色功能設定</div>
+                         <div style={{marginBottom:'20px', color:'#777'}}>勾選各個角色可以使用的後台選單功能。設定後，該角色的所有員工將共用此權限。</div>
+                         
+                         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:'20px'}}>
+                            {Object.keys(rolePermissions).map(role => (
+                               <div key={role} style={{background:'#fff', padding:'20px', borderRadius:'15px', border:'1px solid #eee'}}>
+                                  <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'15px', borderBottom:'1px solid #f1f2f6', paddingBottom:'10px'}}>
+                                     <span style={{fontSize:'20px'}}>{role === 'admin' ? '🔴' : role === 'leader' ? '🔵' : '🟢'}</span>
+                                     <span style={{fontWeight:'bold', fontSize:'18px', textTransform:'uppercase'}}>{role}</span>
+                                  </div>
+                                  <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                                     {[
+                                       { id: 'kds', label: '👨‍🍳 廚房看板' },
+                                       { id: 'menu', label: '📋 菜單管理' },
+                                       { id: 'categories', label: '🔢 排序管理' },
+                                       { id: 'dashboard', label: '📊 今日概覽' },
+                                       { id: 'analytics', label: '📈 營業分析' },
+                                       { id: 'history', label: '🕒 出餐紀錄' },
+                                       { id: 'staff', label: '👥 人員權限' },
+                                       { id: 'settings', label: '⚙️ 系統設定' }
+                                     ].map(opt => (
+                                        <label key={opt.id} style={{display:'flex', alignItems:'center', gap:'10px', cursor:'pointer', padding:'8px 12px', borderRadius:'8px', background: rolePermissions[role].includes(opt.id) ? 'rgba(39,174,96,0.05)' : '#f8f9fa', transition:'all 0.2s'}}>
+                                           <input 
+                                              type="checkbox" 
+                                              checked={rolePermissions[role].includes(opt.id)}
+                                              onChange={(e) => {
+                                                 const newPerms = { ...rolePermissions };
+                                                 if (e.target.checked) {
+                                                    newPerms[role] = [...newPerms[role], opt.id];
+                                                 } else {
+                                                    newPerms[role] = newPerms[role].filter(id => id !== opt.id);
+                                                 }
+                                                 setRolePermissions(newPerms);
+                                              }}
+                                           />
+                                           <span style={{fontSize:'14px'}}>{opt.label}</span>
+                                        </label>
+                                     ))}
+                                  </div>
+                               </div>
+                            ))}
+                         </div>
+                         
+                         <div className="modal-actions" style={{marginTop:'30px'}}>
+                            <button className="btn btn-confirm" onClick={async () => {
+                               try {
+                                 await window.POSDatabase.saveRolePermissions(rolePermissions);
+                                 setShowRoleModal(false);
+                                 showModal('權限設定已成功儲存！');
+                               } catch(e) { showModal('儲存失敗：' + e.message, 'error'); }
+                            }}>儲存設定</button>
+                            <button className="btn btn-cancel" onClick={() => setShowRoleModal(false)}>取消</button>
+                         </div>
+                      </div>
                     </div>
                   )}
                </div>

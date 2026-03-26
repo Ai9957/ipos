@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>廚房顯示系統 (KDS) | 獨立看板</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  <script src="public/db.js"></script>
+  <style>
+    :root { --primary-color: #f75c03; --bg-color: #f1f2f6; }
+    body { font-family: "Microsoft JhengHei", sans-serif; background: var(--bg-color); margin: 0; padding: 20px; overflow-x: hidden; }
+    .kds-header { display: flex; justify-content: space-between; alignItems: center; margin-bottom: 25px; padding: 15px 30px; background: #fff; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+    .clock { font-size: 24px; font-weight: 900; color: #2c3e50; font-family: monospace; }
+    
+    .order-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+    .order-card { background: #fff; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); overflow: hidden; display: flex; flex-direction: column; transition: transform 0.2s; border-top: 8px solid #2ed573; }
+    .order-card-header { color: #fff; padding: 15px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; background: #2ed573; }
+    .order-items { padding: 15px; flex: 1; min-height: 150px; background: #fafafa; }
+    .kds-item { margin-bottom: 12px; font-size: 18px; border-bottom: 1px dashed #e1e1e1; padding-bottom: 12px; }
+    .qty { font-weight: bold; color: var(--primary-color); font-size: 22px; margin-right: 15px; background: #fff3ed; padding: 2px 10px; border-radius: 8px; }
+    .card-actions { padding: 15px; border-top: 1px solid #f0f0f0; background: #fff; }
+    .btn-done { width: 100%; padding: 16px; color: #fff; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; transition: filter 0.2s; }
+    .btn-done:active { filter: brightness(0.9); }
+    
+    .type-badge { padding: 6px 12px; border-radius: 6px; font-size: 14px; font-weight: 900; color: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-transform: uppercase; }
+    
+    .status-bar { display: flex; gap: 15px; align-items: center; }
+    .btn-test { padding: 10px 20px; background: #fff; border: 2px solid #3498db; color: #3498db; border-radius: 30px; font-weight: bold; cursor: pointer; }
+    .sound-toggle { display: flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 30px; border: 2px solid #2ed573; color: #27ae60; font-weight: bold; cursor: pointer; transition: all 0.2s; }
+    .sound-toggle.muted { border-color: #dcdde1; color: #7f8c8d; }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .order-card { animation: fadeIn 0.3s ease-out; }
+  </style>
+</head>
+<body onClick="(() => { const a = document.getElementById('orderAudio'); if(a && a.paused) { a.muted = true; a.play().then(() => { a.pause(); a.muted = false; console.log('Audio unlocked'); }).catch(() => {}); } })()">
+  <audio id="orderAudio" src="order.mp3" preload="auto"></audio>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const POSDatabase = (() => {
+      const dbInstance = firebase.apps.length ? firebase.firestore() : null;
+      return {
+        subscribeToOrders: (callback) => {
+          const startOfToday = new Date();
+          startOfToday.setHours(0, 0, 0, 0);
+          return dbInstance.collection('orders')
+            .where('createdAt', '>=', startOfToday.toISOString())
+            .orderBy('createdAt', 'desc')
+            .onSnapshot(snap => callback(snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+        },
+        updateOrderStatus: async (id, status) => {
+          const updateData = { status };
+          if (status === 'completed') updateData.completedAt = new Date().toISOString();
+          await dbInstance.collection('orders').doc(id).update(updateData);
+        },
+        getKDSSettings: (callback) => {
+          return dbInstance.collection('settings').doc('kds_settings').onSnapshot(s => callback(s.exists ? s.data() : { yellow: 5, red: 10 }));
+        }
+      };
+    })();
+
+    function OrderCard({ order, onComplete, kdsSettings }) {
+      const [elapsed, setElapsed] = useState(0);
+      const yellowThreshold = kdsSettings?.yellow || 5;
+      const redThreshold = kdsSettings?.red || 10;
+
+      useEffect(() => {
+        const calc = () => {
+          const start = new Date(order.createdAt).getTime();
+          setElapsed(Math.floor((Date.now() - start) / 60000));
+        };
+        calc();
+        const tid = setInterval(calc, 10000);
+        return () => clearInterval(tid);
+      }, [order.createdAt]);
+
+      let color = '#2ed573';
+      if (elapsed >= redThreshold) color = '#ff4757';
+      else if (elapsed >= yellowThreshold) color = '#f1c40f';
+
+      const currentType = order.orderType || '內用';
+      const getOrderNo = (id) => id.includes('-') ? id.split('-')[1] : id.substring(0, 6);
+
+      return (
+        <div className="order-card" style={{ borderTop: `8px solid ${color}` }}>
+          <div className="order-card-header" style={{ background: color, color: color === '#f1c40f' ? '#2f3640' : '#fff' }}>
+            <span style={{fontSize:'24px'}}>#{getOrderNo(order.id)}</span>
+            <span style={{fontSize:'18px'}}>{elapsed} 分鐘</span>
+          </div>
+          <div style={{padding:'10px 15px', background:'#f8f9fa', borderBottom:'1px solid #eee', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+            <span className="type-badge" style={{background: currentType ==='外送' ? '#9b59b6' : (currentType ==='外帶' ? '#f39c12' : '#1abc9c')}}>{currentType}</span>
+            <span style={{fontSize:'14px', color:'#777'}}>{new Date(order.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+          </div>
+          <div className="order-items">
+            {(order.items || []).map((item, idx) => (
+              <div key={idx} className="kds-item">
+                <span className="qty">{item.quantity}</span>
+                <span style={{fontWeight:'bold'}}>{item.title || item.name}</span>
+                {item.notes && <div style={{fontSize: '15px', color: '#e67e22', marginLeft: '45px', marginTop: '5px'}}>▫️ {item.notes}</div>}
+              </div>
+            ))}
+          </div>
+          <div className="card-actions">
+            <button className="btn-done" style={{ background: color, color: color === '#f1c40f' ? '#2f3640' : '#fff' }} onClick={() => onComplete(order.id)}>完成出餐</button>
+          </div>
+        </div>
+      );
+    }
+
+    function KDSApp() {
+      const [orders, setOrders] = useState([]);
+      const [kdsSettings, setKdsSettings] = useState({ yellow: 5, red: 10 });
+      const [isMuted, setIsMuted] = useState(false);
+      const [time, setTime] = useState(new Date());
+      const lastOrderTimeRef = useRef("");
+      const isInitialLoadRef = useRef(true);
+
+      const playOrderSound = () => {
+        const audio = document.getElementById('orderAudio');
+        if (audio) {
+          audio.currentTime = 0;
+          audio.play().catch(e => console.warn('Audio play blocked:', e));
+        }
+      };
+
+      useEffect(() => {
+        const timer = setInterval(() => setTime(new Date()), 1000);
+        const unsubSettings = POSDatabase.getKDSSettings(setKdsSettings);
+        const unsubOrders = POSDatabase.subscribeToOrders((data) => {
+          const currentData = data || [];
+          const pending = currentData.filter(o => o.status === 'pending');
+          
+          if (pending.length > 0) {
+            const latestTime = pending.reduce((max, o) => o.createdAt > max ? o.createdAt : max, "");
+            if (!isInitialLoadRef.current && latestTime > lastOrderTimeRef.current) {
+              if (!isMuted) playOrderSound();
+            }
+            lastOrderTimeRef.current = latestTime;
+          }
+          
+          isInitialLoadRef.current = false;
+          setOrders(currentData);
+        });
+
+        return () => { clearInterval(timer); unsubSettings(); unsubOrders(); };
+      }, [isMuted]);
+
+      const pendingOrders = orders.filter(o => o.status === 'pending');
+
+      return (
+        <div>
+          <header className="kds-header">
+            <div>
+              <h1 style={{margin:0, fontSize:'28px', color:'#2c3e50'}}>👨‍🍳 廚房製作看板 (Pending: {pendingOrders.length})</h1>
+              <div style={{color:'#777', marginTop:'5px'}}>即時同步櫃台訂單，無須登入即可查看。</div>
+            </div>
+            <div className="status-bar">
+              <div className="clock">{time.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'})}</div>
+              <button className="btn-test" onClick={playOrderSound}>🔔 測試鈴聲</button>
+              <div className={`sound-toggle ${isMuted ? 'muted' : ''}`} onClick={() => setIsMuted(!isMuted)}>
+                <span style={{fontSize:'20px'}}>{isMuted ? '🔇' : '🔊'}</span>
+                <span>提示音：{isMuted ? '關閉' : '開啟'}</span>
+              </div>
+            </div>
+          </header>
+
+          <main>
+            {pendingOrders.length === 0 ? (
+              <div style={{textAlign:'center', padding:'100px', color:'#95a5a6'}}>
+                <div style={{fontSize:'60px', marginBottom:'20px'}}>🍳</div>
+                <h2>目前沒有等待製作的訂單</h2>
+                <p>新訂單進來時會自動顯示在此並發出提示音。</p>
+              </div>
+            ) : (
+              <div className="order-grid">
+                {pendingOrders.map(order => (
+                  <OrderCard 
+                    key={order.id} 
+                    order={order} 
+                    kdsSettings={kdsSettings}
+                    onComplete={(id) => POSDatabase.updateOrderStatus(id, 'completed')} 
+                  />
+                ))}
+              </div>
+            )}
+          </main>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<KDSApp />);
+  </script>
+</body>
+</html>
