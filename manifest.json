@@ -1,0 +1,17 @@
+{
+  "short_name": "iPOS",
+  "name": "智慧 POS 餐飲系統",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#ff4757",
+  "background_color": "#ffffff",
+  "orientation": "any"
+}
