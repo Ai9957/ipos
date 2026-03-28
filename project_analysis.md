@@ -1,59 +1,59 @@
-# 餐廳 POS 與 KDS 系統框架分析報告
+# 餐廳 POS 與 KDS 系統框架分析報告 (SaaS Arquitecture)
 
-本專案是一個基於網頁前端技術開發的輕量型「餐廳 POS (銷售點服務) 與 KDS (廚房顯示系統)」。此系統不依賴傳統的後端伺服器 (Node.js/Python 等)，而是將所有邏輯運算建立在前端，並透過 CDN 載入 Firebase 處理資料庫儲存與即時同步。
+本專案是一個基於網頁前端技術開發的「餐廳 POS (銷售點服務) 與 KDS (廚房顯示系統)」。系統已從單店版演進為 **SaaS 多租戶架構**，支援總公司統一管理多個商家租戶。系統不依賴傳統後端 Node.js/Java，而是徹底透過 Firebase Firestore 實現即時資料同步並由前端進行邏輯封裝。
 
 ## 🛠 技術堆疊 (Tech Stack)
 
 *   **前端核心**: HTML5, CSS3, JavaScript (ES6+)。
-*   **UI 框架**: React 18 (使用 UMD 透過 CDN 載入)，搭配 `@babel/standalone` 直接在瀏覽器端編譯 JSX。
-*   **資料庫與後端服務**: Firebase Firestore (即時資料庫 Firebase v9/v8 compat)，負責訂單、菜單、設定的雲端儲存與即時推播。具備 LocalStorage 的本地備用狀態與設定存取。
-*   **PDF 匯出**: 使用 `html2pdf.js` 將營業報表轉檔匯出。
-*   **樣式設計**: 原生 CSS (`index.css`) 與行內樣式 (Inline-style) 結合，介面設計現代且具備動態互動回饋。
-*   **音效提示**: 運用原生的 HTML `<audio>` 標籤播放 `order.mp3`。
+*   **UI 框架**: React 18 (透過 UMD 載入)，搭配 `@babel/standalone` 在瀏覽器即時編譯 JSX。
+*   **資料庫**: Firebase Firestore (v9 compat)，負責跨裝置即時事件流傳輸。
+*   **登入與授權**: 儲存區本地憑證 (`localStorage`) 實作的無伺服器防禦（具備擴充 Firebase Auth 彈性）。
+*   **多租戶架構**: 採用 Path-based 動態資料隔離 (`merchants/{merchantId}/...`)。
+*   **PDF/報表**: 使用 `html2pdf.js` 產生實體營業報表與圖表。
 
 ---
 
-## 📂 核心檔案與架構分析
+## 📂 核心架構分析
 
-整個框架由三個主要的 HTML 頁面組成，每一個檔案代表系統中的一個重要角色與視角：
+系統設計分為三個層級：**總公司管理層**、**商家 SaaS 層**、以及**單店展示層**。
 
-### 1. `index.html` - 前台點餐結帳系統 (POS)
-主要提供給**櫃台收銀員**使用，處理顧客點餐流程。
-*   **權限控制 (Login Overlay)**: 使用 4 位數字 PIN 碼登入機制解鎖系統。
-*   **點餐介面**: 
-    *   左方為分類導航 (漢堡、飲料、點心等)，分類與圖示由後端動態配置。
-    *   中間為餐點清單，支援客製化選項 (例如：去冰、半糖) 的彈出選擇視窗。
-    *   右方為購物車收銀區。
-*   **結帳系統 (Checkout)**:
-    *   **點餐類型**: 內用、外帶、外送。
-    *   **支付方式**: 現金、信用卡、LINE Pay。
-    *   **現金計算機**: 針對現金付款提供大按鍵的數字鍵盤與快速按鈕 (+100, +500)，自動計算找零。
-*   **收據與工單列印**: 結帳後能自動觸發瀏覽器列印功能，並可根據設定列印「客戶結帳聯」與「廚房製作聯」。
-*   **狀態管理**: 訂單確立後將狀態設為 `pending` 並寫入 Firebase Firestore，即時同步至後端與廚房。
+### 1. 總公司管理層 (Headquarters)
+*   **`HQ_admin.html` (總公司管理後台)**:
+    *   **超級管理員登入 (`HQLoginOverlay`)**: 提供專屬的科技風登入頁面防護，密碼憑證可於系統設定區動態修改。
+    *   **商家與訂閱管理**: 建立/編輯新商家預設配置、權限控制，並管控訂閱方案 (Free, Pro, Enterprise) 與 30 天到期預警。
+    *   **全平台真實即時營收聚合**: 不依賴假資料（以往），現在於端點自動建立全加盟商 `$mid/orders` 的並行監聽機制，能在前端瞬間匯聚「真實的今日訂單營收總和」，極具技術亮點。
+    *   **系統級公告下發機制**: 修改總部變數後，寫入公共 Firestore `hq_core/settings` 以驅動各分店介面。
 
-### 2. `admin.html` - 後台管理與全功能看板 (Admin Dashboard)
-提供給**店長、組長或管理員**使用的系統設定與管理中心。登入後根據員工身分 (Role: admin, leader, cashier) 決定可看見的側邊欄權限：
-*   **👨‍🍳 廚房看板 (KDS)**: 與 `kds.html` 功能相似整合於後台，新訂單自動推播音效並擁有超時視覺警示。
-*   **📋 菜單管理**: 進行餐點的增、刪、改、查，包含圖片上傳支援與客製化標籤設定。
-*   **🔢 排序管理**: 設定餐點分類的顯示順序，以及每個分類下餐點的優先排序。
-*   **📊 今日概覽 & 📉 營業分析**: 查看今日營運狀況，產生報表，並支援使用 `html2pdf` 輸出為 PDF 檔案。
-*   **🕒 出餐紀錄**: 查詢歷史訂單明細與紀錄。
-*   **👥 人員權限**: 管理員工資料與對應的 PIN 碼。
-*   **⚙️ 系統設定**: 包含 KDS 超時警示時間 (黃/紅燈分鐘設定)、結帳類型/支付方式的啟用/停用設定、品牌 Logo 與店名設定，及列印機參數。
+### 2. 商家 SaaS 層 (Multi-tenant SaaS)
+此層級以 `_saas.html` 後綴命名，藉由讀取 URL Parameter `?mid=xxx` 決定其資料源 (`baseRef`)：
+*   **`index_saas.html` (SaaS 點餐前台)**: 切換分店專屬菜單。具備**訂閱到期攔截**機制，若過期則鎖定系統，阻擋接單。
+*   **`admin_saas.html` (SaaS 店長後台)**: 供商家管理員查閱單店的報表。具備全局 `useEffect` 即時監聽 `hq_core/settings`，實現總部公告以 `Banner` 形勢跨平台強勢推送功能。
+*   **`kds_saas.html` (SaaS 廚房看板)**: 專屬廚房邏輯隔離，提高處理效能。
 
-### 3. `kds.html` - 獨立廚房顯示系統 (KDS)
-提供給**內場廚房人員**觀看與操作的精簡版看板。
-*   **免登入設計**: 為求廚房作業快速展示，無需密碼登入即可開啟。
-*   **訂單監控與警示**: 
-    *   即時顯示所有狀態為 `pending` 的新訂單。
-    *   根據設定的等待時間給予動態顏色警示 (預設 5 分鐘轉黃，10 分鐘轉紅)。
-    *   當前台成功結帳傳送訂單時，會自動播放提示音效 (`order.mp3`)。
-*   **狀態更新**: 廚房製作完成後點擊「完成出餐」，將該訂單狀態更新為 `completed`，自動從畫面上移除。
+### 3. 單店展示層 (Demo)
+原先的單一店面檔案已重新命名為 `_demo.html` 形式：
+*   **`index_demo.html` / `admin_demo.html`**:
+    *   為獨立店鋪開發與離線測試基礎樣板（或沒有使用 URL param 切換的分支），方便獨立除錯 POS 功能。提供跟 SaaS 一致的 UI 組件。
 
 ---
 
-## 🌟 系統開發亮點
-1. **Serverless 架構**: 免除了傳統需架設 Node.js/Java 伺服器的成本，依靠 Firebase Firestore 即可達成資料持久化，快速輕量且部署容易。
-2. **極致的即時連動性**: 得益於 Firestore 的 `onSnapshot`，前台的下單、後台的菜單修改、或是 KDS 按下完成，所有前端設備的畫面與資料會於毫秒內自動同步更新。
-3. **優異的前端元件化**: 雖然直接寫在 HTML 當中，但充分利用了 React 的 `useState`, `useEffect`, `useMemo`，以及 Functional Components 分離了 UI 區塊 (如 `OrderCard`, `LoginOverlay`)。
-4. **靈活的離線/後備應對**: 底層的 `POSDatabase` 自帶 `dbMode` 檢測，即使沒有填寫正確的 Firebase API Key 或是網路未連線，能夠部分降級使用模擬資料或 LocalStorage。
+## 💾 資料結構 (Data Schema)
+
+目前採用了 **「主幹-分支 (Trunk and Branch)」** 的 NoSQL 結構來符合前端查詢成本的最佳化：
+
+- `hq_core/` (全局設定層)
+    - `settings`: (總部名稱 `name`, 公告資訊 `announcement`, 更新時間戳 `updatedAt`)
+- `merchants/` (SaaS 商家資料層)
+    - `{merchantId}/` (Document)
+        - `menu_items/` (Sub-collection) - 商品名稱、價格、客製化選項等。
+        - `orders/` (Sub-collection) - 收銀機與 KDS 的核心溝通管道，具狀態機標記。
+        - `settings/` (Sub-collection) - 單店設定檔：
+            - `branding` / `category_order` / `staff` / `printer`。
+
+---
+
+## 🌟 系統亮點總結
+
+1.  **無感架構切換 (Zero-downtime Pivot)**: 僅透過 `window.POSDatabase` 原型封裝與 `mid` 的網址變化，即將原本單一店鋪的 POS，進化擁有百家分店擴充能力的輕型 SaaS 系統。
+2.  **分散式即時運算**: 成功運用前端的 JS 事件迴圈並行處理跨店的 Collection 資料聚合，在不使用 Firebase Cloud Functions 的情況下也能實作出具備高度正確性的管理大盤。
+3.  **UI/UX 極致體驗設計**: 以觸控螢幕作為主要目標設計，實作了訂製化的毛玻璃 Modal 與 Alert 提示框，移除了破壞體驗的原生瀏覽器彈窗，全面邁向現代化商用設備佈局。

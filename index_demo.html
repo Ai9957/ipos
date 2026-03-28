@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>POS 系統</title>
+  <title>POS 系統 (DEMO)</title>
   <link rel="stylesheet" href="index.css">
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -13,10 +13,35 @@
   <script>
     window.POSDatabase = (function() {
       const firebaseConfig = { apiKey: "AIzaSyDTsrdVcwm7mi2aGoexNG4QqcEyn6JFqpw", authDomain: "project-a60e1765-a61e-40db-82e.firebaseapp.com", projectId: "project-a60e1765-a61e-40db-82e" };
-      let dbMode = 'local', dbInstance = null;
+      let dbMode = 'local', dbInstance = null, baseRef = null;
+      let midParam = null;
+
       if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
-        try { if (!firebase.apps.length) firebase.initializeApp(firebaseConfig); dbInstance = firebase.firestore(); dbMode = 'firebase'; } catch(e) { console.error(e); }
+        try { 
+          if (!firebase.apps.length) firebase.initializeApp(firebaseConfig); 
+          dbInstance = firebase.firestore(); 
+          dbMode = 'firebase'; 
+          
+          const urlParams = new URLSearchParams(window.location.search);
+          midParam = urlParams.get('mid');
+          if (midParam) {
+             baseRef = dbInstance.collection('merchants').doc(midParam);
+             const testRef = baseRef.collection('settings').doc('branding');
+          } else {
+             baseRef = dbInstance;
+          }
+        } catch(e) { console.error(e); }
       }
+
+      const getCol = (colName) => {
+         if (midParam && colName !== 'merchants') return baseRef.collection(colName);
+         return dbInstance.collection(colName);
+      };
+
+      const getDoc = (colName, docId) => {
+         return getCol(colName).doc(docId);
+      };
+
       const saveOrder = async (orderInfo) => {
         const now = new Date();
         const newOrder = { ...orderInfo, status: 'pending', createdAt: now.toISOString() };
@@ -29,7 +54,7 @@
 
              const startOfDay = new Date();
              startOfDay.setHours(0,0,0,0);
-             const snapshot = await dbInstance.collection('orders')
+             const snapshot = await getCol('orders')
                    .where('createdAt', '>=', startOfDay.toISOString())
                    .get();
              
@@ -44,39 +69,40 @@
              const nextSeqStr = String(maxSeq + 1).padStart(4, '0');
              const docId = `${prefix}${nextSeqStr}`;
              
-             await dbInstance.collection('orders').doc(docId).set(newOrder);
+             await getCol('orders').doc(docId).set(newOrder);
              return docId;
            } catch(e) {
              console.error("Custom ID creation failed, falling back to auto-ID.", e);
-             const res = await dbInstance.collection('orders').add(newOrder);
+             const res = await getCol('orders').add(newOrder);
              return res.id;
            }
         }
       };
+      
       const getMenu = (callback) => {
-        if (dbMode === 'firebase') return dbInstance.collection('menu_items').onSnapshot((s) => callback(s.docs.map(doc => ({ ...doc.data(), id: doc.id }))));
+        if (dbMode === 'firebase') return getCol('menu_items').onSnapshot((s) => callback(s.docs.map(doc => ({ ...doc.data(), id: doc.id }))));
       };
       const getCategoryOrder = (callback) => {
-        if (dbMode === 'firebase') return dbInstance.collection('settings').doc('category_order').onSnapshot((s) => callback(s.exists ? (s.data().order || []) : []));
+        if (dbMode === 'firebase') return getDoc('settings', 'category_order').onSnapshot((s) => callback(s.exists ? (s.data().order || []) : []));
       };
       const getItemOrders = (callback) => {
-        if (dbMode === 'firebase') return dbInstance.collection('settings').doc('item_orders').onSnapshot((s) => callback(s.exists ? s.data() : {}));
+        if (dbMode === 'firebase') return getDoc('settings', 'item_orders').onSnapshot((s) => callback(s.exists ? s.data() : {}));
       };
       const getUIVisibility = (callback) => {
-        if (dbMode === 'firebase') return dbInstance.collection('settings').doc('ui_visibility').onSnapshot((s) => callback(s.exists ? s.data() : { 
+        if (dbMode === 'firebase') return getDoc('settings', 'ui_visibility').onSnapshot((s) => callback(s.exists ? s.data() : { 
           types: ['內用', '外帶', '外送'], 
           payments: ['現金', '信用卡', 'LINE Pay'] 
         }));
       };
       const getCategoryIcons = (callback) => {
-        if (dbMode === 'firebase') return dbInstance.collection('settings').doc('category_icons').onSnapshot((s) => callback(s.exists ? s.data() : {}));
+        if (dbMode === 'firebase') return getDoc('settings', 'category_icons').onSnapshot((s) => callback(s.exists ? s.data() : {}));
       };
       const getBranding = (callback) => {
-        if (dbMode === 'firebase') return dbInstance.collection('settings').doc('branding').onSnapshot((s) => callback(s.exists ? s.data() : { name: '智慧 POS', logo: '' }));
+        if (dbMode === 'firebase') return getDoc('settings', 'branding').onSnapshot((s) => callback(s.exists ? s.data() : { name: '智慧 POS', logo: '' }));
       };
       const getPrinterSettings = (callback) => {
         if (dbMode === 'firebase') {
-          return dbInstance.collection('settings').doc('printer').onSnapshot((s) => callback(s.exists ? s.data() : {
+          return getDoc('settings', 'printer').onSnapshot((s) => callback(s.exists ? s.data() : {
             printKitchen: true, kitchenCopies: 1, printCustomer: true, customerCopies: 1
           }));
         } else {
@@ -89,12 +115,13 @@
       };
       const saveMenuItem = async (item) => {
         const data = { ...item }; let id = data.id; delete data.id;
-        if (dbMode === 'firebase') { if(id) await dbInstance.collection('menu_items').doc(String(id)).update(data); else await dbInstance.collection('menu_items').add(data); }
+        if (dbMode === 'firebase') { if(id) await getCol('menu_items').doc(String(id)).update(data); else await getCol('menu_items').add(data); }
       };
+      
       return { 
         saveOrder, getMenu, getCategoryOrder, getItemOrders, getUIVisibility, getCategoryIcons, getBranding, getPrinterSettings,
         getStaff: (callback) => {
-          if (dbMode === 'firebase') return dbInstance.collection('settings').doc('staff').onSnapshot((s) => callback(s.exists ? s.data().list : [
+          if (dbMode === 'firebase') return getDoc('settings', 'staff').onSnapshot((s) => callback(s.exists ? s.data().list : [
             { id: '1', name: '店長', title: '管理員', pin: '0000', role: 'admin' },
             { id: '2', name: '小明', title: '組長', pin: '1111', role: 'leader' },
             { id: '3', name: '小美', title: '收銀員', pin: '2222', role: 'cashier' }

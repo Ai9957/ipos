@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>iPOS 總公司管理後台</title>
+  <title>iPOS HQ - 總公司管理後台</title>
   <link rel="stylesheet" href="index.css">
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -12,377 +12,884 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
     :root {
-      --primary-color: #f75c03;
-      --bg-dark: #1a1a1a;
-      --card-bg: #ffffff;
+      --primary-color: #ea580c; /* Orange */
+      --primary-hover: #c2410c;
+      --bg-dark: #1f2937; /* Dark gray for sidebar */
+      --bg-light: #f3f4f6; /* Light gray for main area */
+      --text-main: #111827;
+      --text-muted: #6b7280;
+      --border-color: #e5e7eb;
     }
-    body {
-      margin: 0;
-      font-family: 'Segoe UI', "Microsoft JhengHei", sans-serif;
-      background: #f0f2f5;
-      color: #333;
-    }
-    .admin-container {
-      display: flex;
-      height: 100vh;
-    }
-    .sidebar {
-      width: 260px;
-      background: var(--bg-dark);
-      color: white;
-      padding: 30px 20px;
-      display: flex;
-      flex-direction: column;
-    }
-    .main-content {
-      flex: 1;
-      padding: 40px;
-      overflow-y: auto;
-    }
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 30px;
-    }
-    .merchant-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 25px;
-    }
-    .merchant-card {
-      background: white;
-      border-radius: 15px;
-      padding: 25px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-      border-top: 5px solid var(--primary-color);
-      transition: transform 0.2s;
-    }
-    .merchant-card:hover {
-      transform: translateY(-5px);
-    }
-    .merchant-card h3 {
-      margin-top: 0;
-      color: var(--primary-color);
-    }
-    .btn {
-      padding: 10px 20px;
-      border-radius: 8px;
-      border: none;
-      cursor: pointer;
-      font-weight: bold;
-      transition: all 0.2s;
-    }
-    .btn-primary {
-      background: var(--primary-color);
-      color: white;
-    }
-    .btn-outline {
-      border: 1px solid var(--primary-color);
-      color: var(--primary-color);
-      background: transparent;
-    }
-    .modal {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.6);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-    .modal-box {
-      background: white;
-      padding: 30px;
-      border-radius: 15px;
-      width: 500px;
-      max-width: 90%;
-    }
-    .form-group {
-      margin-bottom: 20px;
-    }
-    .form-group label {
-      display: block;
-      margin-bottom: 8px;
-      font-weight: bold;
-    }
-    .form-group input {
-      width: 100%;
-      padding: 12px;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-    }
-    .badge {
-      padding: 4px 10px;
-      border-radius: 5px;
-      font-size: 12px;
-      font-weight: bold;
-    }
-    .badge-active { background: #e8f8f5; color: #1abc9c; }
-    .badge-pending { background: #fef5e7; color: #f39c12; }
-    .badge-expired { background: #fff5f5; color: #ff4757; }
+    * { box-sizing: border-box; font-family: 'Inter', -apple-system, 'Microsoft JhengHei', sans-serif; }
+    body { margin: 0; background: var(--bg-light); color: var(--text-main); }
     
-    table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; }
-    th { text-align: left; padding: 15px 20px; background: #f8f9fa; color: #777; font-size: 14px; }
-    td { padding: 15px 20px; border-bottom: 1px solid #eee; }
+    .app-layout { display: flex; height: 100vh; overflow: hidden; }
+    .sidebar { width: 250px; background: var(--bg-dark); color: white; display: flex; flex-direction: column; padding: 20px 0; flex-shrink: 0; }
+    .sidebar-logo { padding: 0 24px 30px; }
+    .sidebar-logo h1 { margin: 0; color: var(--primary-color); font-size: 24px; font-weight: 800; }
+    .sidebar-logo span { font-size: 13px; color: #9ca3af; font-weight: normal; }
+    .nav-menu { flex: 1; display: flex; flex-direction: column; gap: 5px; padding: 0 10px; }
+    .nav-item { padding: 12px 20px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 12px; color: #d1d5db; font-weight: 500; transition: 0.2s; }
+    .nav-item:hover { background: rgba(255,255,255,0.05); color: white; }
+    .nav-item.active { background: var(--primary-color); color: white; }
     
-    .sidebar-item { padding: 15px 20px; border-radius: 10px; cursor: pointer; margin-bottom: 5px; transition: all 0.2s; display: flex; align-items: center; gap: 10px; }
-    .sidebar-item:hover { background: rgba(255,255,255,0.05); }
-    .sidebar-item.active { background: var(--primary-color); color: white; }
+    .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .top-header { display: flex; justify-content: flex-end; align-items: center; padding: 15px 30px; background: white; border-bottom: 1px solid var(--border-color); gap: 15px; }
+    .user-info { text-align: right; font-size: 13px; color: var(--text-muted); }
+    .user-info span { color: var(--text-main); font-weight: 500; }
+    .btn-logout { background: #fef2f2; color: #ef4444; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+    .btn-logout:hover { background: #fee2e2; }
+
+    .content-area { flex: 1; padding: 30px; overflow-y: auto; }
+    
+    /* 商家營運中心 Header Banner */
+    .banner-header { display: flex; background: var(--primary-color); border-radius: 12px; padding: 15px 25px; align-items: center; justify-content: space-between; color: white; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgba(234, 88, 12, 0.2); }
+    .banner-header h2 { margin: 0; display: flex; align-items: center; gap: 10px; font-size: 20px; }
+    .btn-add { background: transparent; border: 2px solid white; color: white; padding: 8px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 15px; }
+    .btn-add:hover { background: white; color: var(--primary-color); }
+
+    /* 四宮格 Stats */
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 25px; }
+    .stat-card { background: white; padding: 20px; border-radius: 12px; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-left: 4px solid #e5e7eb; }
+    .stat-card.blue { border-left-color: #3b82f6; }
+    .stat-card.green { border-left-color: #10b981; }
+    .stat-card.yellow { border-left-color: #f59e0b; }
+    .stat-card.orange { border-left-color: var(--primary-color); }
+    .stat-title { font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; font-weight: 600; margin-bottom: 10px; }
+    .stat-value { font-size: 28px; font-weight: 800; color: var(--text-main); }
+
+    /* Search Bar */
+    .search-filter-bar { display: flex; gap: 15px; margin-bottom: 25px; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .search-input { flex: 1; padding: 10px 15px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; outline: none; transition: 0.2s; }
+    .search-input:focus { border-color: var(--primary-color); box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.1); }
+    .filter-select { padding: 10px 15px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; outline: none; min-width: 150px; }
+
+    /* Merchant Cards Layout */
+    .merchant-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 25px; }
+    .merchant-card { background: white; border-radius: 16px; padding: 25px; box-shadow: 0 2px 10px rgba(0,0,0,0.02); display: flex; flex-direction: column; border-top: 5px solid var(--primary-color); transition: 0.2s; }
+    .merchant-card:hover { transform: translateY(-3px); box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
+    .merchant-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; }
+    .merchant-card-header h3 { margin: 0; font-size: 18px; color: var(--primary-color); display: flex; gap: 8px; align-items: center; }
+    .plan-badge { font-size: 12px; padding: 4px 12px; border-radius: 20px; font-weight: 600; background: #fff7ed; color: var(--primary-color); }
+    .plan-badge.enterprise { background: #f3e8ff; color: #7e22ce; }
+    .merchant-card-body { font-size: 14px; color: var(--text-muted); flex: 1; margin-bottom: 25px; }
+    .merchant-card-body p { margin: 6px 0; }
+    .merchant-card-actions { display: flex; gap: 10px; }
+    .btn { flex: 1; padding: 10px 0; text-align: center; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: 0.2s; border: 1px solid transparent; }
+    .btn-outline { background: white; border-color: var(--border-color); color: var(--text-main); }
+    .btn-outline:hover { background: #f9fafb; border-color: #d1d5db; }
+    .btn-solid { background: var(--primary-color); color: white; }
+    .btn-solid:hover { background: var(--primary-hover); }
+
+    /* CRM Table */
+    .crm-table-container { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .crm-table { width: 100%; border-collapse: collapse; text-align: left; }
+    .crm-table th { background: #f9fafb; padding: 15px 20px; font-weight: 600; color: var(--text-muted); font-size: 13px; border-bottom: 1px solid var(--border-color); }
+    .crm-table td { padding: 15px 20px; border-bottom: 1px solid var(--border-color); font-size: 14px; }
+    .crm-table tr:last-child td { border-bottom: none; }
+    .crm-table tr:hover { background: #fcfcfc; }
+    .status-badge { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+    .status-warning { background: #fef3c7; color: #d97706; }
+    .status-safe { background: #d1fae5; color: #059669; }
+    .status-danger { background: #fee2e2; color: #dc2626; }
+
+    /* Settings Page */
+    .settings-card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); max-width: 800px; margin-bottom: 30px; }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; font-weight: 600; margin-bottom: 8px; font-size: 14px; }
+    .form-control { width: 100%; padding: 12px 15px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; outline: none; transition: 0.2s; }
+    .form-control:focus { border-color: var(--primary-color); }
+    textarea.form-control { resize: vertical; min-height: 100px; }
+    .danger-zone { background: #fef2f2; border: 1px solid #fecaca; padding: 25px; border-radius: 12px; max-width: 800px; }
+    .danger-zone h3 { color: #dc2626; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+    .danger-zone p { color: var(--text-muted); font-size: 13px; margin: 0 0 15px; }
+
+    /* Modal Styling */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+    .modal-content { background: white; width: 100%; max-width: 800px; border-radius: 16px; display: flex; flex-direction: column; max-height: 90vh; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+    .modal-header { padding: 25px 30px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: bold; }
+    .modal-body { padding: 30px; overflow-y: auto; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .form-grid.single { grid-template-columns: 1fr; }
+    .modal-footer { padding: 20px 30px; border-top: 1px solid var(--border-color); display: flex; gap: 15px; background: #f9fafb; }
+    
+    .auth-box { border: 1px dashed #f59e0b; background: #fffbeb; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; }
+    .auth-box label { color: #d97706; display: flex; align-items: center; gap: 8px; }
+    .time-group { display: flex; align-items: center; gap: 15px; }
+    .muted-text { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
   </style>
 </head>
 <body>
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useMemo } = React;
 
     const firebaseConfig = { apiKey: "AIzaSyDTsrdVcwm7mi2aGoexNG4QqcEyn6JFqpw", authDomain: "project-a60e1765-a61e-40db-82e.firebaseapp.com", projectId: "project-a60e1765-a61e-40db-82e" };
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    function Dashboard() {
+    const CACHE_KEY = "hq_cached_revenue";
+
+    const getSuperAdmin = () => {
+      try {
+        const saved = localStorage.getItem('hq_super_admin');
+        if (saved) return JSON.parse(saved);
+      } catch(e) {}
+      return { email: 'myusoft1@gmail.com', password: 'admin', name: '超級管理員' };
+    };
+
+    function HQLoginOverlay({ onLogin, hqSettings }) {
+      const [email, setEmail] = useState('');
+      const [password, setPassword] = useState('');
+      const [error, setError] = useState('');
+
+      const handleLogin = (e) => {
+        e.preventDefault();
+        const adminData = getSuperAdmin();
+        if (email === adminData.email && password === adminData.password) {
+          onLogin(adminData);
+        } else {
+          setError('電子郵件或密碼錯誤，請重新確認！');
+          setPassword('');
+        }
+      };
+
+      return (
+        <div style={{ position: 'fixed', inset: 0, background: 'linear-gradient(135deg, #f8fafc, #e2e8f0)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#1e293b', zIndex: 9999 }}>
+          <div style={{ background: '#ffffff', padding: '50px', borderRadius: '24px', border: '1px solid #e2e8f0', width: '100%', maxWidth: '400px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', textAlign: 'center' }}>
+            <h1 style={{ fontSize: '32px', marginBottom: '10px', fontWeight: '900', color: 'var(--primary-color)' }}>{hqSettings?.name || 'iPOS HQ'}</h1>
+            <p style={{ color: '#64748b', marginBottom: '30px', fontSize: '16px' }}>總部營運管理中心</p>
+            
+            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {error && <div style={{ color: '#ef4444', background: '#fef2f2', padding: '10px', borderRadius: '8px', fontSize: '14px', border: '1px solid #fee2e2', animation: 'shake 0.4s' }}>{error}</div>}
+              
+              <div style={{ textAlign: 'left' }}>
+                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#475569', fontWeight: 'bold' }}>超級管理員信箱</label>
+                 <input type="email" value={email} onChange={e=>setEmail(e.target.value)} required style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#0f172a', fontSize: '16px', outline: 'none', transition: '0.2s' }} placeholder="請輸入 Email (預設: myusoft1@gmail.com)" onFocus={e=>e.target.style.borderColor='var(--primary-color)'} onBlur={e=>e.target.style.borderColor='#cbd5e1'} />
+              </div>
+              
+              <div style={{ textAlign: 'left' }}>
+                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#475569', fontWeight: 'bold' }}>系統密碼</label>
+                 <input type="password" value={password} onChange={e=>setPassword(e.target.value)} required style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#0f172a', fontSize: '16px', outline: 'none', transition: '0.2s' }} placeholder="請輸入密碼 (預設: admin)" onFocus={e=>e.target.style.borderColor='var(--primary-color)'} onBlur={e=>e.target.style.borderColor='#cbd5e1'} />
+              </div>
+
+              <button type="submit" style={{ marginTop: '10px', padding: '16px', borderRadius: '12px', border: 'none', background: 'var(--primary-color)', color: '#fff', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 15px rgba(249, 115, 22, 0.3)' }} onMouseOver={e=>e.target.style.transform='scale(1.02)'} onMouseOut={e=>e.target.style.transform='scale(1)'}>
+                安全登入系統
+              </button>
+            </form>
+          </div>
+          <style>{`@keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-10px); } 40%, 80% { transform: translateX(10px); } }`}</style>
+        </div>
+      );
+    }
+
+    function HQDashboard() {
+      // Auth Context
+      const [currentUser, setCurrentUser] = useState(() => {
+        try {
+          const saved = localStorage.getItem('hq_admin_session');
+          return saved ? JSON.parse(saved) : null;
+        } catch(e) { return null; }
+      });
+
+      const handleLoginSuccess = (user) => {
+        setCurrentUser(user);
+        localStorage.setItem('hq_admin_session', JSON.stringify(user));
+      };
+
+      const handleLogout = () => {
+        triggerAlert('確定要安全登出系統嗎？', 'warning', '登出確認', () => {
+          setCurrentUser(null);
+          localStorage.removeItem('hq_admin_session');
+        });
+      };
       const [merchants, setMerchants] = useState([]);
-      const [activeTab, setActiveTab] = useState('merchants'); // merchants, subscriptions
-      const [showModal, setShowModal] = useState(false);
-      const [newMerchant, setNewMerchant] = useState({ id: '', name: '', plan: 'Pro' });
+      const [activeTab, setActiveTab] = useState('merchants'); // merchants, crm, settings
+      const [searchQuery, setSearchQuery] = useState('');
+      const [filterPlan, setFilterPlan] = useState('all');
+      const [filterStatus, setFilterStatus] = useState('all');
       
-      const [editSub, setEditSub] = useState(null); // { mid, name, plan, expiryDate }
+      const [showModal, setShowModal] = useState(false);
+      const [isEditing, setIsEditing] = useState(false);
+      const [contactModal, setContactModal] = useState(null); // { merchant data }
+      const [renewModal, setRenewModal] = useState(null); // { merchant data }
+      const [renewObj, setRenewObj] = useState({ mode: 'add', months: 1, date: '' });
+      const [alertModal, setAlertModal] = useState(null); // { msg, type, title, onConfirm }
+      
+      const triggerAlert = (msg, type = 'success', title = '提示', onConfirm = null) => {
+        setAlertModal({ msg, type, title, onConfirm });
+      };
+      
+      // HQ Settings state
+      const [hqSettings, setHqSettings] = useState({ name: 'iPOS HQ', language: 'zh-TW', announcement: '', updatedAt: '' });
+      
+      const [superAdminData, setSuperAdminData] = useState(() => {
+        try {
+          const saved = localStorage.getItem('hq_super_admin');
+          if (saved) return JSON.parse(saved);
+        } catch(e) {}
+        return { email: 'myusoft1@gmail.com', password: 'admin' };
+      });
+      
+      const defaultForm = {
+        name: '', mid: '', plan: 'Pro', contactName: '', contactPhone: '',
+        industry: '餐飲業', city: '台中市', district: '西區', address: '',
+        authEmail: '', timeStart: '10:00', timeEnd: '22:00'
+      };
+      const [formData, setFormData] = useState(defaultForm);
+      
+      const [revenuesByMerchant, setRevenuesByMerchant] = useState({});
+
+      useEffect(() => {
+        document.title = `${hqSettings.name || 'iPOS HQ'} - 總公司管理後台`;
+      }, [hqSettings.name]);
 
       useEffect(() => {
         const unsub = db.collection('merchants').onSnapshot(snapshot => {
           setMerchants(snapshot.docs.map(doc => ({ ...doc.data(), mid: doc.id })));
         });
+        
+        // 讀取 HQ Settings
+        db.collection('hq_core').doc('settings').get().then(doc => {
+           if(doc.exists) setHqSettings(doc.data());
+        });
+
         return unsub;
       }, []);
 
+      useEffect(() => {
+        // 設定今日起始時間
+        const startOfDay = new Date();
+        startOfDay.setHours(0,0,0,0);
+        const startIso = startOfDay.toISOString();
+
+        // 對所有商家建立監聽，獲取各自今日即時營收
+        const unsubs = merchants.map(m => {
+           return db.collection(`merchants/${m.mid}/orders`)
+              .where('createdAt', '>=', startIso)
+              .onSnapshot(snap => {
+                 let dTotal = 0;
+                 snap.forEach(doc => {
+                    const data = doc.data();
+                    if(data.totalAmount) dTotal += Number(data.totalAmount);
+                 });
+                 setRevenuesByMerchant(prev => ({
+                    ...prev,
+                    [m.mid]: dTotal
+                 }));
+              }, err => {
+                 console.warn(`獲取商家 ${m.mid} 的營收失敗:`, err);
+              });
+        });
+
+        return () => unsubs.forEach(fn => fn && typeof fn === 'function' && fn());
+      }, [merchants]);
+
+      // 動態即時加總
+      const estRevenue = Object.values(revenuesByMerchant).reduce((a, b) => a + b, 0);
+
       const getExpiryStatus = (dateStr) => {
-        if (!dateStr) return { label: '未設定', class: 'badge-pending', days: 0 };
+        if (!dateStr) return { label: '永久', days: 9999, isWarning: false, isExpiring: false };
         const expiry = new Date(dateStr);
         const now = new Date();
-        const diffTime = expiry - now;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const diffDays = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
         
-        if (diffDays < 0) return { label: '已過期', class: 'badge-expired', days: diffDays };
-        if (diffDays <= 7) return { label: '即將到期', class: 'badge-pending', days: diffDays };
-        return { label: '正常', class: 'badge-active', days: diffDays };
+        let label = '正常';
+        let isExpiring = false;
+        let isExpired = false;
+        
+        if (diffDays < 0) { label = '已過期'; isExpired = true; }
+        else if (diffDays <= 15) { label = '即將到期'; isExpiring = true; }
+        
+        return { label, days: diffDays, isExpiring, isExpired };
       };
 
-      const handleAddMerchant = async () => {
-        if (!newMerchant.id || !newMerchant.name) {
-          alert('請填寫商店 ID 與名稱');
+      const handleSaveSettings = async () => {
+         try {
+            const updatePayload = {
+               ...hqSettings,
+               updatedAt: new Date().toISOString()
+            };
+            await db.collection('hq_core').doc('settings').set(updatePayload, { merge: true });
+            setHqSettings(updatePayload); // 同步更新在地 state
+            triggerAlert('系統設定與全平台公告已成功發佈！', 'success', '發佈完成');
+         } catch(e) { 
+            console.error("Save Settings Failed:", e);
+            triggerAlert('儲存失敗：' + e.message, 'error'); 
+         }
+      };
+
+      const handleResetData = () => {
+         // UI ONLY - Safeguard
+         triggerAlert("警告：此操作將會清空所有商家資料庫，確定要繼續嗎？（此為安全展示版本，將不會實際刪除）", "warning", "系統重置確認", () => {
+            triggerAlert('重置指令已攔截（僅具備展示機制）。', 'info');
+         });
+      };
+
+      const handleOpenCreateModal = () => {
+         setIsEditing(false);
+         setFormData(defaultForm);
+         setShowModal(true);
+      };
+
+      const handleOpenEditModal = (merch) => {
+         setIsEditing(true);
+         setFormData({
+            ...defaultForm,
+            ...merch,
+            mid: merch.mid // ID cannot be changed
+         });
+         setShowModal(true);
+      };
+
+      const handleSaveMerchant = async () => {
+        if (!formData.mid || !formData.name) {
+          triggerAlert('請填寫商店 ID 與名稱', 'warning');
           return;
         }
         
         try {
           const defaultExpiry = new Date();
-          defaultExpiry.setDate(defaultExpiry.getDate() + 30); // 預設 30 天試用
+          defaultExpiry.setDate(defaultExpiry.getDate() + 30);
+          const finalExpiry = formData.expiryDate || defaultExpiry.toISOString();
 
-          // 1. 建立商家主資料
-          await db.collection('merchants').doc(newMerchant.id).set({
-            name: newMerchant.name,
-            plan: newMerchant.plan,
-            createdAt: new Date().toISOString(),
-            expiryDate: defaultExpiry.toISOString(),
+          const merchantPayload = {
+            name: formData.name,
+            plan: formData.plan,
+            contactName: formData.contactName || '',
+            contactPhone: formData.contactPhone || '',
+            industry: formData.industry || '餐飲業',
+            city: formData.city || '台中市',
+            district: formData.district || '西區',
+            address: formData.address || '',
+            authEmail: formData.authEmail || '',
+            timeStart: formData.timeStart || '10:00',
+            timeEnd: formData.timeEnd || '22:00',
+            expiryDate: finalExpiry,
             status: 'active'
-          });
+          };
 
-          // 2. 初始化商家配置 (Branding)
-          await db.collection(`merchants/${newMerchant.id}/settings`).doc('branding').set({
-            name: newMerchant.name,
-            logo: 'https://cdn-icons-png.flaticon.com/512/6978/6978255.png'
-          });
+          if (!isEditing) {
+            merchantPayload.createdAt = new Date().toISOString();
+          }
 
-          // 3. 初始化預設權限
-          await db.collection(`merchants/${newMerchant.id}/settings`).doc('role_permissions').set({
-            perms: {
-              admin: ['kds', 'menu', 'categories', 'dashboard', 'analytics', 'history', 'staff', 'settings'],
-              leader: ['kds', 'dashboard', 'analytics', 'history'],
-              cashier: []
-            }
-          });
+          // 儲存主資料
+          await db.collection('merchants').doc(formData.mid).set(merchantPayload, { merge: true });
+
+          if (!isEditing) {
+             // 初始化商家配置 (Branding)
+             await db.collection(`merchants/${formData.mid}/settings`).doc('branding').set({
+               name: formData.name, logo: ''
+             });
+             // 初始化預設權限
+             await db.collection(`merchants/${formData.mid}/settings`).doc('role_permissions').set({
+               perms: {
+                 admin: ['kds', 'menu', 'categories', 'dashboard', 'analytics', 'history', 'staff', 'settings'],
+                 leader: ['kds', 'dashboard', 'analytics', 'history'],
+                 cashier: []
+               }
+             });
+          }
 
           setShowModal(false);
-          setNewMerchant({ id: '', name: '', plan: 'Pro' });
+          triggerAlert(isEditing ? '商家資料修改成功！' : '新商家建立成功！');
         } catch (e) {
-          alert('建立失敗: ' + e.message);
+          triggerAlert('儲存失敗: ' + e.message, 'error');
         }
       };
 
-      const handleUpdateSubscription = async () => {
-        if (!editSub) return;
-        try {
-          await db.collection('merchants').doc(editSub.mid).update({
-            plan: editSub.plan,
-            expiryDate: editSub.expiryDate,
-            status: new Date(editSub.expiryDate) > new Date() ? 'active' : 'suspended'
-          });
-          setEditSub(null);
-        } catch (e) { alert('更新失敗: ' + e.message); }
+      const handleOpenRenew = (m) => {
+         setRenewModal(m);
+         const currentExpiry = m.expiryDate ? new Date(m.expiryDate) : new Date();
+         currentExpiry.setMonth(currentExpiry.getMonth() + 1);
+         setRenewObj({ mode: 'add', months: 1, date: currentExpiry.toISOString().split('T')[0] });
       };
 
-      const handleQuickRenew = (merchant, months) => {
-        const currentExpiry = merchant.expiryDate ? new Date(merchant.expiryDate) : new Date();
-        const baseDate = currentExpiry > new Date() ? currentExpiry : new Date();
-        baseDate.setMonth(baseDate.getMonth() + months);
-        
-        setEditSub({ 
-          ...merchant, 
-          expiryDate: baseDate.toISOString().split('T')[0] 
-        });
+      const submitRenew = async () => {
+         if (!renewModal) return;
+         
+         let finalDateIso = '';
+         let msg = '';
+         
+         if (renewObj.mode === 'add') {
+             if (renewObj.months <= 0) {
+                triggerAlert("請選擇有效的展延月數", "warning");
+                return;
+             }
+             const currentExpiry = renewModal.expiryDate ? new Date(renewModal.expiryDate) : new Date();
+             const baseDate = currentExpiry > new Date() ? currentExpiry : new Date();
+             baseDate.setMonth(baseDate.getMonth() + renewObj.months);
+             finalDateIso = baseDate.toISOString();
+             msg = `續約成功！已為「${renewModal.name}」展延了 ${renewObj.months} 個月。`;
+         } else {
+             if (!renewObj.date) {
+                triggerAlert("請選擇有效的到期日期", "warning");
+                return;
+             }
+             const targetDate = new Date(renewObj.date);
+             targetDate.setHours(23, 59, 59);
+             finalDateIso = targetDate.toISOString();
+             msg = `儲存成功！已將「${renewModal.name}」的到期日設定為 ${renewObj.date}。`;
+         }
+
+         try {
+            await db.collection('merchants').doc(renewModal.mid).update({
+               expiryDate: finalDateIso
+            });
+            triggerAlert(msg);
+            setRenewModal(null);
+         } catch(e) { triggerAlert('續約失敗：'+e.message, 'error'); }
       };
+
+      // 計算統計數據
+      const activeCount = merchants.filter(m => {
+          const st = getExpiryStatus(m.expiryDate);
+          return !st.isExpired;
+      }).length;
+      
+      const expiringCount = merchants.filter(m => {
+          const st = getExpiryStatus(m.expiryDate);
+          return st.isExpiring && !st.isExpired;
+      }).length;
+
+      // 篩選
+      const filteredMerchants = merchants.filter(m => {
+         const matchesSearch = m.name?.includes(searchQuery) || m.mid?.includes(searchQuery);
+         const matchesPlan = filterPlan === 'all' || m.plan === filterPlan;
+         
+         let matchesStatus = true;
+         if (filterStatus !== 'all') {
+            const st = getExpiryStatus(m.expiryDate);
+            if (filterStatus === 'normal') matchesStatus = !st.isExpiring && !st.isExpired;
+            else if (filterStatus === 'expiring') matchesStatus = st.isExpiring && !st.isExpired;
+            else if (filterStatus === 'expired') matchesStatus = st.isExpired;
+         }
+         
+         return matchesSearch && matchesPlan && matchesStatus;
+      });
+
+      if (!currentUser) {
+        return <HQLoginOverlay onLogin={handleLoginSuccess} hqSettings={hqSettings} />;
+      }
 
       return (
-        <div className="admin-container">
+        <div className="app-layout">
           <div className="sidebar">
-            <h2 style={{color: 'var(--primary-color)'}}>iPOS HQ</h2>
-            <p style={{fontSize: '14px', opacity: 0.7}}>總公司管理後台</p>
-            <div style={{marginTop: '40px'}}>
-              <div className={`sidebar-item ${activeTab === 'merchants' ? 'active' : ''}`} onClick={() => setActiveTab('merchants')}>🏢 商家管理</div>
-              <div className={`sidebar-item ${activeTab === 'subscriptions' ? 'active' : ''}`} onClick={() => setActiveTab('subscriptions')}>💎 訂閱方案</div>
-              <div className="sidebar-item" style={{opacity: 0.5}}>⚙️ 系統設定</div>
+            <div className="sidebar-logo">
+              <h1 style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '24px', maxWidth: '100%' }} title={hqSettings.name || 'iPOS HQ'}>
+                {hqSettings.name || 'iPOS HQ'}
+              </h1>
+              <span>總公司管理後台</span>
+            </div>
+            <div className="nav-menu">
+               <div className={`nav-item ${activeTab === 'merchants' ? 'active' : ''}`} onClick={() => setActiveTab('merchants')}>🏢 商家管理</div>
+               <div className={`nav-item ${activeTab === 'crm' ? 'active' : ''}`} onClick={() => setActiveTab('crm')}>💎 訂閱方案</div>
+               <div className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>⚙️ 系統設定</div>
             </div>
           </div>
           
           <div className="main-content">
-            {activeTab === 'merchants' && (
-              <>
-                <div className="header">
-                  <h1>🏢 商家營運中心</h1>
-                  <button className="btn btn-primary" onClick={() => setShowModal(true)}>+ 建立新商家</button>
-                </div>
+            <div className="top-header">
+               <div className="user-info">
+                  登入身分 : <br/><span>{currentUser.email}</span>
+               </div>
+               <button className="btn-logout" onClick={handleLogout}>🚪 登出管理員</button>
+            </div>
 
-                <div className="merchant-grid">
-                  {merchants.map(m => (
-                    <div key={m.mid} className="merchant-card">
-                      <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '15px'}}>
-                        <h3>{m.name}</h3>
-                        <span className={`badge ${getExpiryStatus(m.expiryDate).class}`}>{m.plan}</span>
-                      </div>
-                      <div style={{fontSize: '14px', color: '#666', marginBottom: '20px'}}>
-                        <div>商家 ID: <code>{m.mid}</code></div>
-                        <div>到期日: <strong>{m.expiryDate?.split('T')[0] || '永久'}</strong></div>
-                      </div>
-                      <div style={{display: 'flex', gap: '10px'}}>
-                        <a href={`index_saas.html?mid=${m.mid}`} target="_blank" className="btn btn-outline" style={{flex: 1, textAlign: 'center', textDecoration: 'none'}}>前往前台</a>
-                        <a href={`admin_saas.html?mid=${m.mid}`} target="_blank" className="btn btn-primary" style={{flex: 1, textAlign: 'center', textDecoration: 'none'}}>進入管理</a>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
+            <div className="content-area">
+               
+               {activeTab === 'merchants' && (
+                  <div>
+                     <div className="banner-header">
+                        <h2>🏢 商家營運中心</h2>
+                        <button className="btn-add" onClick={handleOpenCreateModal}>+ 建立新商家</button>
+                     </div>
 
-            {activeTab === 'subscriptions' && (
-              <>
-                <div className="header">
-                  <h1>💎 訂閱方案管理</h1>
-                </div>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>商店名稱 (ID)</th>
-                      <th>目前方案</th>
-                      <th>到期日期</th>
-                      <th>剩餘天數</th>
-                      <th>狀態</th>
-                      <th>操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {merchants.map(m => {
-                      const status = getExpiryStatus(m.expiryDate);
-                      return (
-                        <tr key={m.mid}>
-                          <td>
-                            <strong>{m.name}</strong><br/>
-                            <code style={{fontSize: '11px'}}>{m.mid}</code>
-                          </td>
-                          <td>
-                            <span className="badge badge-active" style={{background: '#f1f8ff', color: '#0366d6'}}>{m.plan}</span>
-                          </td>
-                          <td>{m.expiryDate?.split('T')[0] || '---'}</td>
-                          <td>
-                             <span style={{color: status.days < 0 ? '#ff4757' : (status.days <= 7 ? '#f39c12' : '#333'), fontWeight: 'bold'}}>
-                                {status.days} 天
-                             </span>
-                          </td>
-                          <td><span className={`badge ${status.class}`}>{status.label}</span></td>
-                          <td>
-                            <button className="btn btn-outline" style={{padding: '5px 12px', fontSize: '13px'}} onClick={() => setEditSub({...m, expiryDate: m.expiryDate?.split('T')[0]})}>續費/修改</button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </>
-            )}
+                     <div className="stats-grid">
+                        <div className="stat-card blue">
+                           <div className="stat-title">🏢 總商家數</div>
+                           <div className="stat-value">{merchants.length}</div>
+                        </div>
+                        <div className="stat-card green">
+                           <div className="stat-title">✅ 營運中</div>
+                           <div className="stat-value">{activeCount}</div>
+                        </div>
+                        <div className="stat-card yellow">
+                           <div className="stat-title">⚠️ 即將到期</div>
+                           <div className="stat-value">{expiringCount}</div>
+                        </div>
+                        <div className="stat-card orange">
+                           <div className="stat-title">💰 今日全平台預估營收</div>
+                           <div className="stat-value">${estRevenue.toLocaleString()}</div>
+                        </div>
+                     </div>
 
-            {showModal && (
-              <div className="modal">
-                <div className="modal-box">
-                  <h2>🚀 建立新商家專區</h2>
-                  <div className="form-group">
-                    <label>商店名稱</label>
-                    <input type="text" placeholder="例如：好吃牛肉麵" value={newMerchant.name} onChange={e => setNewMerchant({...newMerchant, name: e.target.value})} />
-                  </div>
-                  <div className="form-group">
-                    <label>商店唯一 ID (mid)</label>
-                    <input type="text" placeholder="例如：beef_noodles" value={newMerchant.id} onChange={e => setNewMerchant({...newMerchant, id: e.target.value})} />
-                  </div>
-                  <div className="form-group">
-                    <label>訂閱方案</label>
-                    <select style={{width: '100%', padding: '12px', borderRadius: '8px'}} value={newMerchant.plan} onChange={e => setNewMerchant({...newMerchant, plan: e.target.value})}>
-                      <option value="Free">Free (免費版)</option>
-                      <option value="Pro">Pro (專業版)</option>
-                      <option value="Enterprise">Enterprise (企業版)</option>
-                    </select>
-                  </div>
-                  <p style={{fontSize: '13px', color: '#777'}}>* 建立後將自動獲得 30 天專業版試用。同步初始化預設配置。</p>
-                  <div style={{display: 'flex', gap: '15px', marginTop: '30px'}}>
-                    <button className="btn btn-primary" style={{flex: 1}} onClick={handleAddMerchant}>確認建立</button>
-                    <button className="btn" style={{flex: 1, background: '#eee'}} onClick={() => setShowModal(false)}>取消</button>
-                  </div>
-                </div>
-              </div>
-            )}
+                     <div className="search-filter-bar">
+                        <input className="search-input" placeholder="🔍 搜尋商店名稱或 ID..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} />
+                        <select className="filter-select" value={filterPlan} onChange={e=>setFilterPlan(e.target.value)}>
+                           <option value="all">所有方案</option>
+                           <option value="Free">Free</option>
+                           <option value="Pro">Pro</option>
+                           <option value="Enterprise">Enterprise</option>
+                        </select>
+                     </div>
 
-            {editSub && (
-              <div className="modal">
-                <div className="modal-box">
-                  <h2>💎 修改訂閱資訊: {editSub.name}</h2>
-                  <div className="form-group">
-                    <label>當前方案</label>
-                    <select style={{width: '100%', padding: '12px', borderRadius: '8px'}} value={editSub.plan} onChange={e => setEditSub({...editSub, plan: e.target.value})}>
-                      <option value="Free">Free (免費版)</option>
-                      <option value="Pro">Pro (專業版)</option>
-                      <option value="Enterprise">Enterprise (企業版)</option>
-                    </select>
+                     <div className="merchant-grid">
+                        {filteredMerchants.map((m, i) => {
+                           const status = getExpiryStatus(m.expiryDate);
+                           return (
+                              <div className="merchant-card" key={m.mid}>
+                                 <div className="merchant-card-header">
+                                    <h3><span style={{color: 'var(--primary-color)'}}>{i+1}</span>{m.name}</h3>
+                                    <span className={`plan-badge ${m.plan === 'Enterprise' ? 'enterprise' : ''}`}>{m.plan}</span>
+                                 </div>
+                                 <div className="merchant-card-body">
+                                    <p>商家 ID: <code>{m.mid}</code></p>
+                                    <p>到期日: <strong style={{color: status.isExpiring ? '#d97706' : '#111827'}}>{m.expiryDate?.split('T')[0] || '永久'} {status.isExpiring && '(即將到期)'}</strong></p>
+                                 </div>
+                                 <div className="merchant-card-actions">
+                                    <button className="btn btn-outline" onClick={()=>window.open(`index_saas.html?mid=${m.mid}`)}>前往前台</button>
+                                    <button className="btn btn-solid" onClick={()=>window.open(`admin_saas.html?mid=${m.mid}`)}>進入管理</button>
+                                    <button className="btn btn-outline" onClick={()=>handleOpenEditModal(m)}>🔧 編輯資料</button>
+                                 </div>
+                              </div>
+                           );
+                        })}
+                     </div>
                   </div>
-                  <div className="form-group">
-                    <label>到期日期</label>
-                    <input type="date" value={editSub.expiryDate} onChange={e => setEditSub({...editSub, expiryDate: e.target.value})} />
+               )}
+
+               {activeTab === 'crm' && (
+                  <div>
+                     <h2 style={{display:'flex', alignItems:'center', gap:'10px', color:'#1f2937', marginBottom:'25px'}}>💎 訂閱方案管理 (CRM)</h2>
+                     
+                     <div className="search-filter-bar">
+                        <input className="search-input" placeholder="🔍 搜尋商店名稱或 ID..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} />
+                        <select className="filter-select" value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
+                           <option value="all">所有狀態</option>
+                           <option value="normal">正常</option>
+                           <option value="expiring">即將到期</option>
+                           <option value="expired">已過期</option>
+                        </select>
+                        <select className="filter-select" value={filterPlan} onChange={e=>setFilterPlan(e.target.value)}>
+                           <option value="all">所有方案</option>
+                           <option value="Free">Free</option>
+                           <option value="Pro">Pro</option>
+                           <option value="Enterprise">Enterprise</option>
+                        </select>
+                     </div>
+
+                     <div className="crm-table-container">
+                        <table className="crm-table">
+                           <thead>
+                              <tr>
+                                 <th>商店名稱 (ID)</th>
+                                 <th>目前方案</th>
+                                 <th>到期日期</th>
+                                 <th>剩餘天數</th>
+                                 <th>狀態</th>
+                                 <th>操作</th>
+                              </tr>
+                           </thead>
+                           <tbody>
+                              {filteredMerchants.map(m => {
+                                 const status = getExpiryStatus(m.expiryDate);
+                                 return (
+                                    <tr key={m.mid}>
+                                       <td>
+                                          <strong>{m.name}</strong><br/>
+                                          <span style={{fontSize:'12px', color:'#9ca3af'}}>{m.mid}</span>
+                                       </td>
+                                       <td><span className={`plan-badge ${m.plan === 'Enterprise' ? 'enterprise' : ''}`}>{m.plan}</span></td>
+                                       <td>{m.expiryDate?.split('T')[0] || '---'}</td>
+                                       <td style={{color: status.isExpired ? '#dc2626' : (status.isExpiring ? '#d97706' : '#111827'), fontWeight:'bold'}}>{status.days} 天</td>
+                                       <td>
+                                          {status.isExpiring && !status.isExpired && <span className="status-badge status-warning">即將到期</span>}
+                                          {status.isExpired && <span className="status-badge status-danger">已過期</span>}
+                                          {!status.isExpiring && !status.isExpired && <span className="status-badge status-safe">正常</span>}
+                                       </td>
+                                       <td>
+                                          <div style={{display:'flex', gap:'8px'}}>
+                                             <button className="btn btn-solid" style={{padding:'6px 12px', flex:'none'}} onClick={()=>handleOpenRenew(m)}>續約</button>
+                                             <button className="btn btn-outline" style={{padding:'5px 12px', flex:'none', borderColor: 'var(--primary-color)', color: 'var(--primary-color)', textDecoration:'none', display:'flex', alignItems:'center'}} onClick={()=>setContactModal(m)}>連絡</button>
+                                          </div>
+                                       </td>
+                                    </tr>
+                                 );
+                              })}
+                           </tbody>
+                        </table>
+                     </div>
                   </div>
-                  <div style={{display: 'flex', gap: '10px', marginBottom: '30px'}}>
-                    <button className="btn btn-outline" onClick={() => handleQuickRenew(editSub, 1)}>+ 1 個月</button>
-                    <button className="btn btn-outline" onClick={() => handleQuickRenew(editSub, 6)}>+ 6 個月</button>
-                    <button className="btn btn-outline" onClick={() => handleQuickRenew(editSub, 12)}>+ 12 個月</button>
+               )}
+
+               {activeTab === 'settings' && (
+                  <div>
+                     <h2 style={{display:'flex', alignItems:'center', gap:'10px', color:'#1f2937', marginBottom:'25px'}}>⚙️ HQ 系統設定</h2>
+                     
+                     <div className="settings-card">
+                        <div className="form-group">
+                           <label>總部顯示名稱</label>
+                           <input type="text" className="form-control" value={hqSettings.name} onChange={e=>setHqSettings({...hqSettings, name: e.target.value})} />
+                        </div>
+                        <div className="form-group">
+                           <label>預設系統語言</label>
+                           <select className="form-control" value={hqSettings.language} onChange={e=>setHqSettings({...hqSettings, language: e.target.value})}>
+                              <option value="zh-TW">繁體中文 (zh-TW)</option>
+                              <option value="en-US">English (en-US)</option>
+                           </select>
+                        </div>
+                        <div className="form-group">
+                           <label>全平台維護公告</label>
+                           <textarea className="form-control" placeholder="輸入後將顯示於所有分店後台首頁（功能預留）" value={hqSettings.announcement} onChange={e=>setHqSettings({...hqSettings, announcement: e.target.value})}></textarea>
+                        </div>
+                        <button className="btn btn-solid" style={{padding:'10px 20px'}} onClick={handleSaveSettings}>儲存變動並發布公告</button>
+                     </div>
+
+                     <div className="settings-card" style={{marginTop:'25px'}}>
+                        <h3 style={{color:'#1f2937', marginBottom:'15px', display:'flex', alignItems:'center', gap:'8px'}}>🔐 超級管理員存取設定</h3>
+                        <div className="form-group">
+                           <label>登入信箱 (Email)</label>
+                           <input type="email" className="form-control" value={superAdminData.email} onChange={e=>setSuperAdminData({...superAdminData, email: e.target.value})} />
+                        </div>
+                        <div className="form-group">
+                           <label>登入密碼</label>
+                           <input type="password" className="form-control" placeholder="請設定新密碼" value={superAdminData.password} onChange={e=>setSuperAdminData({...superAdminData, password: e.target.value})} />
+                        </div>
+                        <button className="btn btn-solid" style={{background:'#10b981', padding:'10px 20px'}} onClick={() => { 
+                           if(!superAdminData.email || !superAdminData.password) {
+                              triggerAlert('信箱與密碼欄位不能為空！', 'warning');
+                              return;
+                           }
+                           localStorage.setItem('hq_super_admin', JSON.stringify({...superAdminData, name: '超級管理員'})); 
+                           triggerAlert('超級管理員密碼更新成功！下次請使用新密碼登入。'); 
+                        }}>更新登入憑證</button>
+                     </div>
+
+                     <div className="danger-zone" style={{marginTop:'30px'}}>
+                        <h3>⚠️ 危險區域</h3>
+                        <p>清除所有快取或重置全系統資料（僅執行者擁有最高權限）。</p>
+                        <button className="btn btn-solid" style={{backgroundColor:'#ef4444'}} onClick={handleResetData}>重置全系統數據</button>
+                     </div>
                   </div>
-                  <div style={{display: 'flex', gap: '15px'}}>
-                    <button className="btn btn-primary" style={{flex: 1}} onClick={handleUpdateSubscription}>儲存變更</button>
-                    <button className="btn" style={{flex: 1, background: '#eee'}} onClick={() => setEditSub(null)}>取消</button>
-                  </div>
-                </div>
-              </div>
-            )}
+               )}
+
+            </div>
           </div>
-        </div>
+          
+          {/* 修改/建立商家Modal */}
+          {showModal && (
+            <div className="modal-overlay">
+               <div className="modal-content">
+                  <div className="modal-header">
+                     {isEditing ? '🔧 修改商家資料' : '🚀 建立新商家專區'}
+                  </div>
+                  <div className="modal-body">
+                     <div className="form-grid">
+                        <div className="form-group">
+                           <label>商店名稱</label>
+                           <input type="text" className="form-control" placeholder="例如：好吃牛肉麵" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} />
+                        </div>
+                        <div className="form-group">
+                           <label>聯絡人姓名</label>
+                           <input type="text" className="form-control" placeholder="老闆姓名" value={formData.contactName} onChange={e=>setFormData({...formData, contactName: e.target.value})} />
+                        </div>
+                        
+                        <div className="form-group">
+                           <label>商店唯一 ID (mid)</label>
+                           <input type="text" className="form-control" placeholder="例如：beef_noodles" disabled={isEditing} value={formData.mid} onChange={e=>setFormData({...formData, mid: e.target.value})} style={{background: isEditing ? '#f3f4f6': 'white'}}/>
+                           <div className="muted-text">* ID 為資料庫主鍵，不允許修改</div>
+                        </div>
+                        <div className="form-group">
+                           <label>聯絡電話</label>
+                           <input type="text" className="form-control" placeholder="09xx-xxx-xxx" value={formData.contactPhone} onChange={e=>setFormData({...formData, contactPhone: e.target.value})} />
+                        </div>
+
+                        <div className="form-group">
+                           <label>產業類型</label>
+                           <select className="form-control" value={formData.industry} onChange={e=>setFormData({...formData, industry: e.target.value})}>
+                              <option value="餐飲業">餐飲業</option>
+                              <option value="零售業">零售業</option>
+                              <option value="服務業">服務業</option>
+                           </select>
+                        </div>
+                        <div className="form-group">
+                           <label>營業區域</label>
+                           <div style={{display:'flex', gap:'10px'}}>
+                              <select className="form-control" style={{flex:1}} value={formData.city} onChange={e=>setFormData({...formData, city: e.target.value})}>
+                                 <option value="台中市">台中市</option>
+                                 <option value="台北市">台北市</option>
+                                 <option value="高雄市">高雄市</option>
+                              </select>
+                              <select className="form-control" style={{flex:1}} value={formData.district} onChange={e=>setFormData({...formData, district: e.target.value})}>
+                                 <option value="西區">西區</option>
+                                 <option value="北區">北區</option>
+                                 <option value="南屯區">南屯區</option>
+                              </select>
+                           </div>
+                        </div>
+
+                        <div className="form-group">
+                           <label>訂閱方案</label>
+                           <select className="form-control" value={formData.plan} onChange={e=>setFormData({...formData, plan: e.target.value})}>
+                              <option value="Free">Free (免費版)</option>
+                              <option value="Pro">Pro (專業版)</option>
+                              <option value="Enterprise">Enterprise (企業版)</option>
+                           </select>
+                        </div>
+                     </div>
+                     
+                     <div className="form-group" style={{marginTop:'20px'}}>
+                        <label>詳細地址</label>
+                        <input type="text" className="form-control" placeholder="路名門牌" value={formData.address} onChange={e=>setFormData({...formData, address: e.target.value})} />
+                     </div>
+
+                     <div className="auth-box">
+                        <label>🔒 管理者授權 Email</label>
+                        <input type="email" className="form-control" placeholder="shop_admin@example.com" value={formData.authEmail} onChange={e=>setFormData({...formData, authEmail: e.target.value})} style={{marginTop:'10px', marginBottom:'10px'}}/>
+                        <div className="muted-text">此 Email 帳號將被授權登入該分店後台。</div>
+                     </div>
+
+                     <div className="form-group">
+                        <label>營業時間 (開始 - 結束)</label>
+                        <div className="time-group">
+                           <input type="time" className="form-control" style={{flex:1}} value={formData.timeStart} onChange={e=>setFormData({...formData, timeStart: e.target.value})} />
+                           <span>-</span>
+                           <input type="time" className="form-control" style={{flex:1}} value={formData.timeEnd} onChange={e=>setFormData({...formData, timeEnd: e.target.value})} />
+                        </div>
+                     </div>
+
+                     {!isEditing && <div className="muted-text">* 建立後將自動獲得 30 天專業版試用。同步初始化預設配置。</div>}
+                  </div>
+                  <div className="modal-footer">
+                     <button className="btn btn-solid" style={{flex:2, padding:'12px'}} onClick={handleSaveMerchant}>{isEditing ? '儲存變更' : '確認建立'}</button>
+                     <button className="btn" style={{flex:1, background:'#e5e7eb', padding:'12px'}} onClick={()=>setShowModal(false)}>取消</button>
+                  </div>
+               </div>
+            </div>
+          )}
+
+          {/* 連絡商家Modal */}
+          {contactModal && (
+             <div className="modal-overlay">
+                <div className="modal-content" style={{maxWidth: '450px'}}>
+                   <div className="modal-header" style={{background:'#fffbeb', color:'#d97706'}}>
+                      📞 商家聯絡資訊
+                   </div>
+                   <div className="modal-body" style={{fontSize:'16px', lineHeight:'1.8'}}>
+                      <h3 style={{marginTop:0, color:'#111827'}}>{contactModal.name}</h3>
+                      <div><span style={{color:'var(--text-muted)'}}>聯絡人：</span> <strong>{contactModal.contactName || '未設定'}</strong></div>
+                      <div><span style={{color:'var(--text-muted)'}}>電話：</span> <strong>{contactModal.contactPhone || '未設定'}</strong></div>
+                      <div><span style={{color:'var(--text-muted)'}}>Email：</span> <strong>{contactModal.authEmail || '未設定'}</strong></div>
+                      <div style={{marginTop:'10px', fontSize:'14px'}}><span style={{color:'var(--text-muted)'}}>地址：</span> {contactModal.city || ''}{contactModal.district || ''}{contactModal.address || ''}</div>
+                   </div>
+                   <div className="modal-footer" style={{justifyContent: 'flex-end'}}>
+                      <a href={`mailto:${contactModal.authEmail || ''}?subject=iPOS 總部系統通知`} className="btn btn-solid" style={{padding:'10px 20px', textDecoration:'none'}}>撰寫 Email</a>
+                      <button className="btn" style={{background:'#e5e7eb', padding:'10px 20px'}} onClick={()=>setContactModal(null)}>關閉</button>
+                   </div>
+                </div>
+             </div>
+          )}
+
+          {/* 續約商家Modal */}
+          {renewModal && (
+             <div className="modal-overlay">
+                <div className="modal-content" style={{maxWidth: '450px'}}>
+                   <div className="modal-header">
+                      💎 方案展延：{renewModal.name}
+                   </div>
+                   <div className="modal-body">
+                      <div className="form-group">
+                         <div style={{display:'flex', gap:'20px', marginBottom:'15px', paddingBottom:'15px', borderBottom:'1px solid var(--border-color)'}}>
+                            <label style={{display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontWeight:renewObj.mode==='add'?'bold':'normal'}}>
+                               <input type="radio" checked={renewObj.mode==='add'} onChange={()=>setRenewObj({...renewObj, mode:'add'})} /> 快速展延 (月數)
+                            </label>
+                            <label style={{display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontWeight:renewObj.mode==='date'?'bold':'normal'}}>
+                               <input type="radio" checked={renewObj.mode==='date'} onChange={()=>setRenewObj({...renewObj, mode:'date'})} /> 自訂指定日期
+                            </label>
+                         </div>
+
+                         {renewObj.mode === 'add' ? (
+                            <div>
+                               <label>快速選擇展延月數</label>
+                               <div style={{display:'flex', gap:'10px', marginBottom:'20px'}}>
+                                  <button className={`btn ${renewObj.months===1?'btn-solid':'btn-outline'}`} onClick={()=>setRenewObj({...renewObj, months: 1})}>+ 1 個月</button>
+                                  <button className={`btn ${renewObj.months===3?'btn-solid':'btn-outline'}`} onClick={()=>setRenewObj({...renewObj, months: 3})}>+ 3 個月</button>
+                                  <button className={`btn ${renewObj.months===6?'btn-solid':'btn-outline'}`} onClick={()=>setRenewObj({...renewObj, months: 6})}>+ 半年</button>
+                                  <button className={`btn ${renewObj.months===12?'btn-solid':'btn-outline'}`} onClick={()=>setRenewObj({...renewObj, months: 12})}>+ 1 年</button>
+                               </div>
+                               <label>自訂輸入 (月)：</label>
+                               <input type="number" className="form-control" value={renewObj.months} onChange={(e)=>setRenewObj({...renewObj, months: parseInt(e.target.value)||0})} min="1" max="120" />
+                            </div>
+                         ) : (
+                            <div>
+                               <label>直接選擇到期日 (日曆)</label>
+                               <input type="date" className="form-control" value={renewObj.date} onChange={(e)=>setRenewObj({...renewObj, date: e.target.value})} />
+                            </div>
+                         )}
+                      </div>
+                   </div>
+                   <div className="modal-footer">
+                      <button className="btn btn-solid" style={{flex:2, padding:'12px'}} onClick={submitRenew}>確認儲存設定</button>
+                      <button className="btn" style={{flex:1, background:'#e5e7eb', padding:'12px'}} onClick={()=>setRenewModal(null)}>取消</button>
+                   </div>
+                </div>
+             </div>
+          )}
+
+           {/* 通用彈窗 AlertModal */}
+           {alertModal && (
+             <div className="modal-overlay" style={{zIndex: 2000, animation: 'fadeIn 0.2s ease'}}>
+               <div className="modal-content" style={{maxWidth: '420px', textAlign: 'center', animation: 'scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'}}>
+                  <div style={{padding: '40px 30px 20px'}}>
+                     <div style={{
+                       width: '70px', height: '70px', borderRadius: '50%', margin: '0 auto 20px',
+                       display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px',
+                       background: alertModal.type === 'error' ? '#fee2e2' : (alertModal.type === 'warning' ? '#fffbeb' : '#ecfdf5'),
+                       color: alertModal.type === 'error' ? '#ef4444' : (alertModal.type === 'warning' ? '#f59e0b' : '#10b981')
+                     }}>
+                       {alertModal.type === 'error' ? '❌' : (alertModal.type === 'warning' ? '⚠️' : '✅')}
+                     </div>
+                     <h3 style={{margin: '0 0 10px', fontSize: '20px', color: '#111827'}}>{alertModal.title}</h3>
+                     <p style={{margin: 0, color: '#6b7280', lineHeight: '1.6', fontSize: '15px'}}>{alertModal.msg}</p>
+                  </div>
+                  <div className="modal-footer" style={{background: 'white', padding: '20px 30px 30px', borderTop: 'none', justifyContent: 'center'}}>
+                     {alertModal.onConfirm ? (
+                       <React.Fragment>
+                         <button className="btn btn-solid" style={{flex: 1, padding: '12px'}} onClick={() => { alertModal.onConfirm(); setAlertModal(null); }}>確定</button>
+                         <button className="btn btn-outline" style={{flex: 1, padding: '12px'}} onClick={() => setAlertModal(null)}>取消</button>
+                       </React.Fragment>
+                     ) : (
+                       <button className="btn btn-solid" style={{padding: '12px 60px', borderRadius: '12px'}} onClick={() => setAlertModal(null)}>太棒了</button>
+                     )}
+                  </div>
+               </div>
+             </div>
+           )}
+ 
+           <style>
+             {`
+               @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+               @keyframes scaleUp { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+               @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+               
+               .btn:active { transform: scale(0.96); }
+               .nav-item:active { transform: scale(0.98); }
+               
+               /* 自訂捲軸 */
+               ::-webkit-scrollbar { width: 8px; }
+               ::-webkit-scrollbar-track { background: transparent; }
+               ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+               ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+             `}
+           </style>
+         </div>
       );
     }
 
     const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<Dashboard />);
+    root.render(<HQDashboard />);
   </script>
 </body>
 </html>
