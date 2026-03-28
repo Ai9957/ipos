@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>POS 系統</title>
+  <link rel="stylesheet" href="index.css">
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script>
+    window.POSDatabase = (function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const merchantId = urlParams.get('mid') || 'demo'; // 預設為 demo
+      const baseRef = `merchants/${merchantId}`;
+
+      const firebaseConfig = { apiKey: "AIzaSyDTsrdVcwm7mi2aGoexNG4QqcEyn6JFqpw", authDomain: "project-a60e1765-a61e-40db-82e.firebaseapp.com", projectId: "project-a60e1765-a61e-40db-82e" };
+      let dbMode = 'local', dbInstance = null;
+      if (firebaseConfig.apiKey && typeof firebase !== 'undefined') {
+        try { if (!firebase.apps.length) firebase.initializeApp(firebaseConfig); dbInstance = firebase.firestore(); dbMode = 'firebase'; } catch(e) { console.error(e); }
+      }
+      const saveOrder = async (orderInfo) => {
+        const now = new Date();
+        const newOrder = { ...orderInfo, status: 'pending', createdAt: now.toISOString(), merchantId };
+        if (dbMode === 'firebase') {
+           try {
+             const yy = String(now.getFullYear()).slice(-2);
+             const mm = String(now.getMonth() + 1).padStart(2, '0');
+             const dd = String(now.getDate()).padStart(2, '0');
+             const prefix = `${yy}${mm}${dd}`;
+
+             const startOfDay = new Date();
+             startOfDay.setHours(0,0,0,0);
+             const snapshot = await dbInstance.collection(`${baseRef}/orders`)
+                   .where('createdAt', '>=', startOfDay.toISOString())
+                   .get();
+             
+             let maxSeq = 0;
+             snapshot.forEach(doc => {
+                 const idStr = doc.id;
+                 if(idStr.startsWith(prefix) && idStr.length === 10) {
+                     const seq = parseInt(idStr.substring(6), 10);
+                     if(seq > maxSeq) maxSeq = seq;
+                 }
+             });
+             const nextSeqStr = String(maxSeq + 1).padStart(4, '0');
+             const docId = `${prefix}${nextSeqStr}`;
+             
+             await dbInstance.collection(`${baseRef}/orders`).doc(docId).set(newOrder);
+             return docId;
+           } catch(e) {
+             console.error("Custom ID creation failed, falling back to auto-ID.", e);
+             const res = await dbInstance.collection(`${baseRef}/orders`).add(newOrder);
+             return res.id;
+           }
+        }
+      };
+      const getMenu = (callback) => {
+        if (dbMode === 'firebase') return dbInstance.collection(`${baseRef}/menu_items`).onSnapshot((s) => callback(s.docs.map(doc => ({ ...doc.data(), id: doc.id }))));
+      };
+      const getCategoryOrder = (callback) => {
+        if (dbMode === 'firebase') return dbInstance.collection(`${baseRef}/settings`).doc('category_order').onSnapshot((s) => callback(s.exists ? (s.data().order || []) : []));
+      };
+      const getItemOrders = (callback) => {
+        if (dbMode === 'firebase') return dbInstance.collection(`${baseRef}/settings`).doc('item_orders').onSnapshot((s) => callback(s.exists ? s.data() : {}));
+      };
+      const getUIVisibility = (callback) => {
+        if (dbMode === 'firebase') return dbInstance.collection(`${baseRef}/settings`).doc('ui_visibility').onSnapshot((s) => callback(s.exists ? s.data() : { 
+          types: ['內用', '外帶', '外送'], 
+          payments: ['現金', '信用卡', 'LINE Pay'] 
+        }));
+      };
+      const getCategoryIcons = (callback) => {
+        if (dbMode === 'firebase') return dbInstance.collection(`${baseRef}/settings`).doc('category_icons').onSnapshot((s) => callback(s.exists ? s.data() : {}));
+      };
+      const getBranding = (callback) => {
+        if (dbMode === 'firebase') return dbInstance.collection(`${baseRef}/settings`).doc('branding').onSnapshot((s) => callback(s.exists ? s.data() : { name: '智慧 POS', logo: '' }));
+      };
+      const getPrinterSettings = (callback) => {
+        if (dbMode === 'firebase') {
+          return dbInstance.collection(`${baseRef}/settings`).doc('printer').onSnapshot((s) => callback(s.exists ? s.data() : {
+            printKitchen: true, kitchenCopies: 1, printCustomer: true, customerCopies: 1
+          }));
+        } else {
+          const emit = () => callback(JSON.parse(localStorage.getItem('pos_printer_settings') || '{"printKitchen":true,"kitchenCopies":1,"printCustomer":true,"customerCopies":1}'));
+          window.addEventListener('storage', (e) => { if(e.key === 'pos_printer_settings') emit(); });
+          window.addEventListener('local-printer-update', emit);
+          emit();
+          return () => { window.removeEventListener('storage', emit); window.removeEventListener('local-printer-update', emit); };
+        }
+      };
+      const saveMenuItem = async (item) => {
+        const data = { ...item }; let id = data.id; delete data.id;
+        if (dbMode === 'firebase') { if(id) await dbInstance.collection(`${baseRef}/menu_items`).doc(String(id)).update(data); else await dbInstance.collection(`${baseRef}/menu_items`).add(data); }
+      };
+      return { 
+        saveOrder, getMenu, getCategoryOrder, getItemOrders, getUIVisibility, getCategoryIcons, getBranding, getPrinterSettings,
+        getStaff: (callback) => {
+          if (dbMode === 'firebase') return dbInstance.collection(`${baseRef}/settings`).doc('staff').onSnapshot((s) => callback(s.exists ? s.data().list : [
+            { id: '1', name: '店長', title: '管理員', pin: '0000', role: 'admin' },
+            { id: '2', name: '小明', title: '組長', pin: '1111', role: 'leader' },
+            { id: '3', name: '小美', title: '收銀員', pin: '2222', role: 'cashier' }
+          ]));
+        },
+        getMerchantInfo: (callback) => {
+          if (dbMode === 'firebase') return dbInstance.collection('merchants').doc(merchantId).onSnapshot((s) => callback(s.exists ? s.data() : null));
+        }
+      };
+    })();
+  </script>
+</head>
+<body>
+  <div id="print-area"></div>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    function SubscriptionExpiryOverlay({ merchantName }) {
+      return (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 10000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', textAlign: 'center', padding: '20px' }}>
+          <div style={{ fontSize: '80px', marginBottom: '20px' }}>⚠️</div>
+          <h1 style={{ fontSize: '32px', marginBottom: '10px' }}>服務已暫停</h1>
+          <p style={{ fontSize: '18px', opacity: 0.8, maxWidth: '500px', lineHeight: '1.6' }}>
+            商家「<strong>{merchantName}</strong>」的 iPOS 訂閱已到期或遭停權。<br/>
+            請聯絡總公司管理員進行續約。
+          </p>
+          <div style={{ marginTop: '40px', fontSize: '14px', color: '#777' }}>
+            System ID: {new URLSearchParams(window.location.search).get('mid')}
+          </div>
+        </div>
+      );
+    }
+
+    function LoginOverlay({ onLogin, staffList, branding }) {
+      const [pin, setPin] = useState('');
+      const [error, setError] = useState('');
+
+      const handleLogin = (digit) => {
+        if (digit === 'del') {
+          setPin(pin.slice(0, -1));
+          setError('');
+          return;
+        }
+        if (pin.length >= 4) return;
+        const newPin = pin + digit;
+        setPin(newPin);
+        
+        if (newPin.length === 4) {
+          const user = staffList.find(s => s.pin === newPin);
+          if (user) {
+            onLogin(user);
+          } else {
+            setError('PIN 碼錯誤，請重新輸入');
+            setTimeout(() => setPin(''), 1000);
+          }
+        }
+      };
+
+      return (
+        <div style={{position:'fixed', inset:0, background:'linear-gradient(135deg, #2c3e50, #1a1a1a)', zIndex:9999, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'#fff', fontFamily:'"Microsoft JhengHei", sans-serif'}}>
+          <img src={branding.logo} style={{width:'80px', height:'80px', borderRadius:'20px', marginBottom:'20px', boxShadow:'0 10px 30px rgba(0,0,0,0.5)'}} />
+          <h1 style={{marginBottom:'10px', fontSize:'32px', fontWeight:'900'}}>{branding.name}</h1>
+          <p style={{color:'rgba(255,255,255,0.6)', marginBottom:'40px', fontSize:'18px'}}>登入解鎖以開啟系統</p>
+          
+          <div style={{display:'flex', gap:'20px', marginBottom:'50px'}}>
+             {[0,1,2,3].map(i => (
+                <div key={i} style={{width:'24px', height:'24px', borderRadius:'50%', border:'2px solid #fff', background: pin.length > i ? '#fff' : 'transparent', transition:'all 0.2s', boxShadow: pin.length > i ? '0 0 15px #fff' : 'none'}}></div>
+             ))}
+          </div>
+
+          {error && <div style={{color:'#ff4757', marginBottom:'30px', fontWeight:'bold', animation:'shake 0.5s'}}>{error}</div>}
+
+          <div style={{display:'grid', gridTemplateColumns:'repeat(3, 90px)', gap:'25px'}}>
+             {[1,2,3,4,5,6,7,8,9].map(n => <button key={n} onClick={() => handleLogin(n.toString())} style={{width:'90px', height:'90px', borderRadius:'50%', border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.05)', color:'#fff', fontSize:'28px', cursor:'pointer', fontWeight:'bold', transition:'all 0.1s'}} onMouseDown={e=>e.target.style.transform='scale(0.9)'} onMouseUp={e=>e.target.style.transform='scale(1)'}>{n}</button>)}
+             <button onClick={() => setPin('')} style={{width:'90px', height:'90px', borderRadius:'50%', border:'none', background:'transparent', color:'#ff4757', fontSize:'20px', cursor:'pointer', fontWeight:'bold'}}>清除</button>
+             <button onClick={() => handleLogin('0')} style={{width:'90px', height:'90px', borderRadius:'50%', border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.05)', color:'#fff', fontSize:'28px', cursor:'pointer', fontWeight:'bold'}} onMouseDown={e=>e.target.style.transform='scale(0.9)'} onMouseUp={e=>e.target.style.transform='scale(1)'}>0</button>
+             <button onClick={() => handleLogin('del')} style={{width:'90px', height:'90px', borderRadius:'50%', border:'none', background:'transparent', color:'#eee', fontSize:'28px', cursor:'pointer'}}>←</button>
+          </div>
+          
+          <style>{`
+            @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-10px); } 40%, 80% { transform: translateX(10px); } }
+          `}</style>
+        </div>
+      );
+    }
+
+    function POSApp() {
+      const [cart, setCart] = useState([]);
+      const [activeCategory, setActiveCategory] = useState('全部');
+      const [menuItems, setMenuItems] = useState([]);
+      const [categoryOrder, setCategoryOrder] = useState([]);
+      const [itemOrders, setItemOrders] = useState({});
+      
+      const [showCheckout, setShowCheckout] = useState(false);
+      const [showSuccessModal, setShowSuccessModal] = useState(false);
+      const [lastOrderDetails, setLastOrderDetails] = useState(null);
+      const [uiVisibility, setUiVisibility] = useState({ types: ['內用', '外帶', '外送'], payments: ['現金', '信用卡', 'LINE Pay'] });
+      const [showOptionsModal, setShowOptionsModal] = useState(null);
+      const [selectedOptions, setSelectedOptions] = useState([]);
+
+      // Checkout Enhancements State
+      const [orderType, setOrderType] = useState('內用'); // 內用, 外帶, 外送
+      const [paymentMethod, setPaymentMethod] = useState('現金'); // 現金, 信用卡, LINE Pay
+      const [amountPaid, setAmountPaid] = useState('');
+      const [isProcessing, setIsProcessing] = useState(false);
+      const [isCollapsed, setIsCollapsed] = useState(false);
+      const [isCartCollapsed, setIsCartCollapsed] = useState(false);
+      const [categoryIcons, setCategoryIcons] = useState({});
+      const [branding, setBranding] = useState({ name: '智慧 POS', logo: '' });
+      const [printerSettings, setPrinterSettings] = useState({ printKitchen: true, kitchenCopies: 1, printCustomer: true, customerCopies: 1 });
+      
+      const [staffList, setStaffList] = useState([]);
+      const [merchantInfo, setMerchantInfo] = useState(null);
+      const [isExpired, setIsExpired] = useState(false);
+      const [currentUser, setCurrentUser] = useState(() => {
+        try {
+          const saved = localStorage.getItem('pos_front_session');
+          return saved ? JSON.parse(saved) : null;
+        } catch (e) { return null; }
+      });
+
+      useEffect(() => {
+        if (branding.name) {
+          document.title = `${branding.name} | POS 前台系統`;
+        }
+        if (branding.logo) {
+          let link = document.querySelector("link[rel~='icon']");
+          if (!link) {
+            link = document.createElement('link');
+            link.rel = 'icon';
+            document.head.appendChild(link);
+          }
+          link.href = branding.logo;
+        }
+      }, [branding.name, branding.logo]);
+
+      useEffect(() => {
+        const unsubInfo = window.POSDatabase.getMerchantInfo((info) => {
+          setMerchantInfo(info);
+          if (info && info.expiryDate) {
+            const expiry = new Date(info.expiryDate);
+            if (expiry < new Date()) {
+              setIsExpired(true);
+            } else {
+              setIsExpired(false);
+            }
+          }
+        });
+        const unsubMenu = window.POSDatabase.getMenu(setMenuItems);
+        const unsubCat = window.POSDatabase.getCategoryOrder(setCategoryOrder);
+        const unsubItemOrders = window.POSDatabase.getItemOrders(setItemOrders);
+        const unsubUIVisibility = window.POSDatabase.getUIVisibility(setUiVisibility);
+        const unsubIcons = window.POSDatabase.getCategoryIcons(setCategoryIcons);
+        const unsubBranding = window.POSDatabase.getBranding(setBranding);
+        const unsubStaff = window.POSDatabase.getStaff(setStaffList);
+        const unsubPrinter = window.POSDatabase.getPrinterSettings ? window.POSDatabase.getPrinterSettings(setPrinterSettings) : null;
+        return () => { 
+          unsubMenu && unsubMenu(); 
+          unsubCat && unsubCat(); 
+          unsubItemOrders && unsubItemOrders(); 
+          unsubUIVisibility && unsubUIVisibility(); 
+          unsubIcons && unsubIcons(); 
+          unsubBranding && unsubBranding(); 
+          unsubStaff && unsubStaff(); 
+          unsubPrinter && unsubPrinter(); 
+        };
+      }, []);
+
+      const handleUpdateLogin = (user) => {
+        setCurrentUser(user);
+        if (user) {
+          localStorage.setItem('pos_front_session', JSON.stringify(user));
+        } else {
+          localStorage.removeItem('pos_front_session');
+        }
+      };
+
+      const handleLogout = () => {
+        if (confirm('確定要登出並鎖定櫃台系統嗎？')) {
+          handleUpdateLogin(null);
+        }
+      };
+
+
+      useEffect(() => {
+        if (!uiVisibility.types.includes(orderType) && uiVisibility.types.length > 0) {
+          setOrderType(uiVisibility.types[0]);
+        }
+        if (!uiVisibility.payments.includes(paymentMethod) && uiVisibility.payments.length > 0) {
+          setPaymentMethod(uiVisibility.payments[0]);
+        }
+      }, [uiVisibility]);
+
+      const categoryLabelMap = { burger: '漢堡', snack: '點心', drink: '飲料', combo: '套餐' };
+      const categoryIconMap = useMemo(() => {
+        return { '漢堡': '🍔', '點心': '🍟', '飲料': '🥤', '套餐': '🍱', '全部': '🏠', ...categoryIcons };
+      }, [categoryIcons]);
+
+      const categories = useMemo(() => {
+        const cats = Array.from(new Set(menuItems.map(item => categoryLabelMap[item.category] || item.category).filter(Boolean)));
+        const finalCats = ['全部', ...cats].sort((a, b) => {
+          if (a === '全部') return -1; if (b === '全部') return 1;
+          let ia = categoryOrder.indexOf(a), ib = categoryOrder.indexOf(b);
+          return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+        });
+        return finalCats;
+      }, [menuItems, categoryOrder]);
+
+      const sortedMenuItems = useMemo(() => {
+        const filtered = menuItems.filter(item => activeCategory === '全部' || (categoryLabelMap[item.category] || item.category) === activeCategory);
+        const order = itemOrders[activeCategory] || [];
+        return [...filtered].sort((a,b) => {
+           let ia = order.indexOf(a.id), ib = order.indexOf(b.id);
+           return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+        });
+      }, [menuItems, activeCategory, itemOrders]);
+
+      const addToCart = (product, options = []) => {
+        const existing = cart.find(item => item.id === product.id && JSON.stringify(item.options) === JSON.stringify(options));
+        if (existing) {
+          setCart(cart.map(item => item === existing ? { ...item, quantity: item.quantity + 1 } : item));
+        } else {
+          setCart([...cart, { ...product, quantity: 1, options }]);
+        }
+      };
+
+      const updateQuantity = (index, delta) => {
+        const newCart = [...cart];
+        newCart[index].quantity += delta;
+        if (newCart[index].quantity <= 0) newCart.splice(index, 1);
+        setCart(newCart);
+      };
+
+      const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+      const printOrder = (order) => {
+        const printArea = document.getElementById('print-area');
+        if (!printArea) return;
+
+        const now = new Date();
+        const timeStr = now.toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' }) + ' ' + 
+                       now.toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit' });
+        
+        const displayId = order.id ? (order.id.length > 8 ? order.id.slice(-4) : order.id) : '---';
+
+        // 1. Customer Receipt (iCHEF Style)
+        let customerHtml = "";
+        if (printerSettings.printCustomer) {
+          const content = `
+            <div class="print-ticket">
+              <div class="print-header">
+                <div class="print-title">${branding.name}</div>
+                <div style="font-size: 13px; font-weight: bold; letter-spacing: 2px;">客戶結帳聯</div>
+              </div>
+              
+              <div style="text-align: center; border: 2px solid #000; margin-bottom: 12px; padding: 8px 0; border-radius: 8px;">
+                 <div style="font-size: 14px; font-weight: bold; margin-bottom: 2px;">取餐叫號 (No)</div>
+                 <div style="font-size: 48px; font-weight: 900; line-height: 1;">${displayId}</div>
+              </div>
+
+              <div class="print-info"><span>訂單單號:</span> #<strong>${order.id}</strong></div>
+              <div class="print-info"><span>交易時間:</span> ${timeStr}</div>
+              <div class="print-info"><span>桌號類型:</span> <strong>${order.orderType}</strong></div>
+              <div class="print-info"><span>服務人員:</span> ${currentUser?.name || 'POS'}</div>
+              
+              <div style="margin: 10px 0;">
+                <div class="print-items-head">
+                  <span>品項內容 / 數量</span>
+                  <span>金額</span>
+                </div>
+                <div class="print-items">
+                  ${order.items.map(i => `
+                    <div class="print-item">
+                      <span>${i.name} x ${i.quantity}</span>
+                      <span>$${i.price * i.quantity}</span>
+                    </div>
+                    ${i.options?.length ? `<div class="print-item-notes">▫️ ${i.options.join(', ')}</div>` : ''}
+                  `).join('')}
+                </div>
+              </div>
+              
+              <div class="print-total-section">
+                <div class="print-info"><span>小計金額:</span> $${order.totalAmount}</div>
+                <div class="print-total">總計金額: $${order.totalAmount}</div>
+              </div>
+              
+              <div style="margin-top: 10px; border-top: 1px dashed #000; padding-top: 8px;">
+                <div class="print-info"><span>付款方式:</span> ${order.paymentMethod}</div>
+                ${order.paymentMethod === '現金' ? `
+                  <div class="print-info"><span>實收現金:</span> $${order.amountPaid}</div>
+                  <div class="print-info"><span>找零金額:</span> $${order.change}</div>
+                ` : ''}
+              </div>
+              
+              <div style="text-align: center; margin-top: 25px; font-size: 11px;">
+                <div style="margin-bottom: 5px; font-weight: bold;">*** 謝謝惠顧 (THANK YOU) ***</div>
+                <div>請憑此單據取餐，遺失不補發</div>
+              </div>
+            </div>
+          `;
+          for(let i=0; i < (printerSettings.customerCopies || 1); i++) {
+            customerHtml += content;
+          }
+        }
+
+        // 2. Kitchen Ticket (Work Slip)
+        let kitchenHtml = "";
+        if (printerSettings.printKitchen) {
+          const content = `
+            <div class="print-ticket">
+              <div class="kitchen-ticket">
+                <div style="font-size: 16px; font-weight: 800; text-align: center;">- 廚房製作聯 -</div>
+                <div class="kitchen-no">NO. ${displayId}</div>
+                <div class="print-info" style="font-size: 18px;">
+                  <span>類型: ${order.orderType}</span>
+                  <span>${new Date().toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit'})}</span>
+                </div>
+                <div style="margin-top: 15px;">
+                  ${order.items.map(i => `
+                    <div class="kitchen-item">
+                      <div class="kitchen-item-row">
+                        <div class="kitchen-qty">${i.quantity}</div>
+                        <div class="kitchen-item-name">${i.name}</div>
+                      </div>
+                      ${i.options?.length ? `<div class="kitchen-notes">${i.options.join(', ')}</div>` : ''}
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+              <div style="text-align:right; font-size:12px; margin-top:5px;">列印序號: ${order.id}</div>
+            </div>
+          `;
+          for(let i=0; i < (printerSettings.kitchenCopies || 1); i++) {
+            kitchenHtml += content;
+          }
+        }
+
+        if (!customerHtml && !kitchenHtml) return;
+
+        printArea.innerHTML = customerHtml + kitchenHtml;
+        window.print();
+        printArea.innerHTML = '';
+      };
+
+      const handleCheckout = async () => {
+        if (cart.length === 0) return;
+        setIsProcessing(true);
+        try {
+          const changeVal = paymentMethod === '現金' ? (Number(amountPaid) - totalAmount) : 0;
+          const orderInfo = { 
+            items: cart.map(i => ({ ...i, title: i.name + (i.options?.length ? ` (${i.options.join(', ')})` : '') })), 
+            totalAmount,
+            orderType,
+            paymentMethod,
+            amountPaid: paymentMethod === '現金' ? Number(amountPaid) : totalAmount,
+            change: changeVal > 0 ? changeVal : 0
+          };
+          const savedId = await window.POSDatabase.saveOrder(orderInfo);
+          const completeOrder = { ...orderInfo, id: savedId };
+          setLastOrderDetails(completeOrder);
+          setCart([]);
+          setShowCheckout(false);
+          setShowSuccessModal(true);
+          setAmountPaid('');
+          setOrderType('內用');
+          setPaymentMethod('現金');
+          
+          // Trigger Print
+          setTimeout(() => printOrder(completeOrder), 500);
+        } catch (e) {
+          alert('結帳失敗：' + e.message);
+        } finally {
+          setIsProcessing(false);
+        }
+      };
+
+      const handleNumpad = (val) => {
+        if (val === 'C') setAmountPaid('');
+        else setAmountPaid(prev => prev + val);
+      };
+
+      const change = (paymentMethod === '現金' && amountPaid) ? (Number(amountPaid) - totalAmount) : 0;
+
+      if (isExpired) return <SubscriptionExpiryOverlay merchantName={merchantInfo?.name || '您的商店'} />;
+
+      return (
+        <React.Fragment>
+        {!currentUser && <LoginOverlay onLogin={handleUpdateLogin} staffList={staffList} branding={branding} />}
+        <div className={`pos-layout ${isCollapsed ? 'collapsed' : ''} ${isCartCollapsed ? 'cart-collapsed' : ''}`}>
+          <div className="side-nav">
+            <div className="collapse-btn" onClick={() => setIsCollapsed(!isCollapsed)}>
+              <span className="btn-icon">←</span>
+            </div>
+            <div className="logo">
+              {isCollapsed ? (
+                branding.logo
+                  ? <img src={branding.logo}
+                      style={{width:'40px', height:'40px', borderRadius:'8px', objectFit:'cover'}}
+                      onError={e => { e.target.style.display='none'; }}
+                    />
+                  : <span style={{fontSize:'28px'}}>🍟</span>
+              ) : (
+                <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:'6px'}}>
+                  {branding.logo
+                    ? <img src={branding.logo}
+                        style={{width:'54px', height:'54px', borderRadius:'10px', objectFit:'cover'}}
+                        onError={e => { e.target.replaceWith(Object.assign(document.createElement('span'), {textContent:'🍟', style:'font-size:40px'})); }}
+                      />
+                    : <span style={{fontSize:'40px'}}>🍟</span>
+                  }
+                  <span style={{fontSize:'15px', fontWeight:'bold', textAlign:'center', lineHeight:'1.3'}}>{branding.name}</span>
+                </div>
+              )}
+            </div>
+            {categories.map(cat => (
+              <div key={cat} className={`nav-item ${activeCategory === cat ? 'active' : ''}`} onClick={() => setActiveCategory(cat)}>
+                <span className="icon" style={{fontSize: isCollapsed ? '24px' : '20px'}}>{categoryIconMap[cat] || '🍽️'}</span>
+                <span>{cat}</span>
+              </div>
+            ))}
+            
+            <div style={{ marginTop: 'auto', paddingBottom: '20px', width: '100%', borderTop: '1px solid #eee', paddingTop: '20px' }}>
+              {!isCollapsed && currentUser && (
+                <div style={{display:'flex', alignItems:'center', gap:'10px', padding:'0 20px', marginBottom:'15px'}}>
+                   <div style={{width:'32px', height:'32px', background:'var(--primary-color)', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:'14px', fontWeight:'bold'}}>{currentUser.name[0]}</div>
+                   <div style={{fontSize:'14px', fontWeight:'bold', color:'#333'}}>{currentUser.name}</div>
+                </div>
+              )}
+              <div className="nav-item" onClick={handleLogout} style={{color:'#ff4757'}}>
+                <span className="icon">🚪</span>
+                <span>系統登出</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="main-content">
+            <div className="menu-grid">
+              {sortedMenuItems.map(product => (
+                <div key={product.id} className="menu-card" onClick={() => {
+                   if (product.customOptions || product.hasOptions) {
+                      const opts = (product.customOptions || '').split(',').map(s => s.trim()).filter(Boolean);
+                      if (opts.length > 0) {
+                         setShowOptionsModal(product);
+                         setSelectedOptions([]);
+                      } else { addToCart(product); }
+                   } else { addToCart(product); }
+                }}>
+                  <div className="card-img-wrapper">
+                    <img src={product.image} className="card-img" alt={product.name} />
+                  </div>
+                  <div className="card-info">
+                    <div className="card-title">{product.name}</div>
+                    <div className="card-price">${product.price}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="cart-sidebar">
+            <div className="cart-content">
+              <div className="cart-header">
+                <h3 style={{margin:0}}>💰 餐點收銀</h3>
+                <span style={{color:'var(--text-gray)'}}>{cart.length} 品項</span>
+              </div>
+              <div className="cart-items">
+                {cart.length === 0 ? (
+                  <div className="cart-empty">點擊左側餐點加入收銀清單</div>
+                ) : cart.map((item, index) => (
+                  <div key={index} className="cart-item">
+                    <div className="cart-item-main">
+                      <div className="cart-item-title">{item.name}</div>
+                      <div className="cart-item-price">${item.price * item.quantity}</div>
+                    </div>
+                    {item.options?.length > 0 && <div style={{fontSize:'12px', color:'#777', marginBottom:'8px'}}>{item.options.join(', ')}</div>}
+                    <div className="cart-item-actions">
+                      <button className="delete-btn" onClick={() => updateQuantity(index, -item.quantity)}>移除</button>
+                      <div className="qty-btn-group">
+                        <button className="qty-btn" onClick={() => updateQuantity(index, -1)}>-</button>
+                        <span className="qty-label">{item.quantity}</span>
+                        <button className="qty-btn" onClick={() => updateQuantity(index, 1)}>+</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="cart-footer">
+                <div className="summary-row">
+                  <span>總計</span>
+                  <span style={{color:'var(--primary-color)'}}>${totalAmount}</span>
+                </div>
+                <button className="checkout-btn" disabled={cart.length === 0} onClick={() => setShowCheckout(true)}>結帳送出</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="cart-collapse-btn" onClick={() => setIsCartCollapsed(!isCartCollapsed)}>
+            <span className="btn-icon">→</span>
+          </div>
+
+          {showOptionsModal && (
+            <div className="modal-overlay">
+              <div className="modal-box">
+                <div className="modal-header">選擇客製化： {showOptionsModal.name}</div>
+                <div className="modifier-section">
+                  <div className="modifier-title">可選擇多項標籤：</div>
+                  <div className="modifier-options">
+                    {(showOptionsModal.customOptions || '').split(',').map(opt => {
+                        const s = opt.trim(); if(!s) return null;
+                        const active = selectedOptions.includes(s);
+                        return (
+                          <div key={s} className={`mod-option ${active ? 'active' : ''}`} onClick={() => {
+                             if(active) setSelectedOptions(selectedOptions.filter(o => o !== s));
+                             else setSelectedOptions([...selectedOptions, s]);
+                          }}>
+                            {s}
+                          </div>
+                        );
+                    })}
+                  </div>
+                </div>
+                <div className="modal-actions">
+                   <button className="btn btn-confirm" onClick={() => { addToCart(showOptionsModal, selectedOptions); setShowOptionsModal(null); }}>確認</button>
+                   <button className="btn btn-cancel" onClick={() => setShowOptionsModal(null)}>取消</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showCheckout && (
+            <div className="modal-overlay">
+              <div className="modal-box" style={{width:'800px', maxWidth:'95vw', display:'flex', gap:'30px'}}>
+                <div style={{flex: 1}}>
+                  <div className="modal-header">結帳與付款</div>
+                  <div style={{background:'#f8f9fa', padding:'20px', borderRadius:'12px', marginBottom:'20px'}}>
+                    <div style={{fontSize:'14px', color:'#777', marginBottom:'10px'}}>應付總額</div>
+                    <div style={{fontSize:'32px', fontWeight:'bold', color:'var(--primary-color)'}}>${totalAmount}</div>
+                  </div>
+
+                  <div style={{marginBottom:'25px'}}>
+                    <div className="modifier-title" style={{marginBottom:'15px'}}>🛵 點餐類型 (Order Type)</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
+                      {uiVisibility.types.map(t => {
+                         const typeStyles = {
+                           '內用': { icon: '🏠', color: '#1abc9c', bg: '#e8f8f5' },
+                           '外帶': { icon: '🛍️', color: '#f39c12', bg: '#fef5e7' },
+                           '外送': { icon: '🛵', color: '#9b59b6', bg: '#f5eef8' }
+                         };
+                         const style = typeStyles[t] || { icon: '🍽️', color: '#95a5a6', bg: '#f2f4f4' };
+                         const isActive = orderType === t;
+                         return (
+                           <div key={t} onClick={() => setOrderType(t)} style={{
+                              display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                              padding: '12px 25px', borderRadius: '30px', cursor: 'pointer',
+                              border: isActive ? `2px solid ${style.color}` : '1px solid #ddd',
+                              background: isActive ? style.bg : '#fff',
+                              boxShadow: isActive ? `0 4px 12px ${style.color}30` : 'none',
+                              transition: 'all 0.2s',
+                              transform: isActive ? 'scale(1.05)' : 'scale(1)'
+                           }}>
+                              <div style={{ fontSize: '20px', filter: isActive ? 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))' : 'grayscale(100%) opacity(0.5)', transition: 'all 0.2s' }}>{style.icon}</div>
+                              <div style={{ fontSize: '16px', fontWeight: 'bold', color: isActive ? style.color : '#777' }}>
+                                 {t}
+                              </div>
+                           </div>
+                         );
+                      })}
+                    </div>
+                  </div>
+
+                  <div style={{marginBottom:'25px'}}>
+                    <div className="modifier-title" style={{marginBottom:'15px'}}>💳 支付方式 (Payment Method)</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
+                      {uiVisibility.payments.map(p => {
+                         const payStyles = {
+                           '現金': { icon: '💵', color: '#e67e22', bg: '#fdf2e9' },
+                           'LINE Pay': { icon: '📱', color: '#27ae60', bg: '#e9f7ef' },
+                           '信用卡': { icon: '💳', color: '#2980b9', bg: '#eaf2f8' }
+                         };
+                         const style = payStyles[p] || { icon: '💰', color: '#95a5a6', bg: '#f2f4f4' };
+                         const isActive = paymentMethod === p;
+                         return (
+                           <div key={p} onClick={() => setPaymentMethod(p)} style={{
+                              display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                              padding: '12px 25px', borderRadius: '30px', cursor: 'pointer',
+                              border: isActive ? `2px solid ${style.color}` : '1px solid #ddd',
+                              background: isActive ? style.bg : '#fff',
+                              boxShadow: isActive ? `0 4px 12px ${style.color}30` : 'none',
+                              transition: 'all 0.2s',
+                              transform: isActive ? 'scale(1.05)' : 'scale(1)'
+                           }}>
+                              <div style={{ fontSize: '20px', filter: isActive ? 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))' : 'grayscale(100%) opacity(0.5)', transition: 'all 0.2s' }}>{style.icon}</div>
+                              <div style={{ fontSize: '16px', fontWeight: 'bold', color: isActive ? style.color : '#777' }}>
+                                 {p}
+                              </div>
+                           </div>
+                         );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="modal-actions">
+                    <button className="btn btn-confirm" style={{height:'60px', fontSize:'20px'}} onClick={handleCheckout} disabled={isProcessing || (paymentMethod === '現金' && (Number(amountPaid) < totalAmount || !amountPaid))}>
+                      {isProcessing ? '處理中...' : '確認結帳送出'}
+                    </button>
+                    <button className="btn btn-cancel" onClick={() => setShowCheckout(false)} disabled={isProcessing}>關閉</button>
+                  </div>
+                </div>
+
+                {paymentMethod === '現金' && (
+                  <div style={{width:'320px', borderLeft:'1px solid #eee', paddingLeft:'30px'}}>
+                    <div className="modifier-title">現金計算機 (TWD)</div>
+                    <div style={{background: '#2f3640', color: '#fff', padding:'20px', borderRadius:'12px', marginBottom:'20px', textAlign:'right'}}>
+                      <div style={{fontSize:'12px', opacity:0.7}}>實收金額</div>
+                      <div style={{fontSize:'36px', fontWeight:'bold', fontFamily:'monospace'}}>${amountPaid || 0}</div>
+                      <div style={{borderTop:'1px solid rgba(255,255,255,0.1)', marginTop:'10px', paddingTop:'10px', color: change >= 0 ? '#badc58' : '#ff6b81', fontWeight:'bold'}}>
+                        {change >= 0 ? `應找零: $${change}` : `還差: $${Math.abs(change)}`}
+                      </div>
+                    </div>
+                    
+                    <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'10px'}}>
+                       {[1,2,3,4,5,6,7,8,9,0,'00'].map(n => (
+                         <button key={n} onClick={() => handleNumpad(n.toString())} style={{padding:'18px', fontSize:'22px', borderRadius:'10px', border:'1px solid #ddd', background:'#fff', fontWeight:'bold', cursor:'pointer'}}>{n}</button>
+                       ))}
+                       <button onClick={() => handleNumpad('C')} style={{padding:'18px', fontSize:'22px', borderRadius:'10px', border:'none', background:'#ff4757', color:'#fff', fontWeight:'bold', cursor:'pointer'}}>C</button>
+                    </div>
+
+                    <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'10px', marginTop:'15px'}}>
+                      <button onClick={() => setAmountPaid(String(Number(amountPaid) + 100))} style={{padding:'12px', background:'#f8f9fa', border:'1px solid #ddd', borderRadius:'8px', fontWeight:'bold', cursor:'pointer'}}>+100</button>
+                      <button onClick={() => setAmountPaid(String(Number(amountPaid) + 500))} style={{padding:'12px', background:'#f8f9fa', border:'1px solid #ddd', borderRadius:'8px', fontWeight:'bold', cursor:'pointer'}}>+500</button>
+                      <button onClick={() => setAmountPaid(String(Number(amountPaid) + 1000))} style={{padding:'12px', background:'#f8f9fa', border:'1px solid #ddd', borderRadius:'8px', fontWeight:'bold', cursor:'pointer'}}>+1000</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {showSuccessModal && (
+            <div className="modal-overlay">
+              <div className="modal-box" style={{textAlign:'center', padding:'40px'}}>
+                <div style={{fontSize:'80px', marginBottom:'20px'}}>✅</div>
+                <h2 style={{marginBottom:'10px', color:'#2f3640'}}>訂單已送出！</h2>
+                <p style={{color:'#7f8fa6', fontSize:'16px', marginBottom:'20px'}}>
+                  訂單已同步至廚房看板<br/>
+                  <strong style={{fontSize:'28px', color:'#3498db', marginTop:'15px', display:'inline-block', padding:'10px 20px', background:'#f1f8ff', borderRadius:'10px', border:'2px dashed #3498db'}}>NO. {lastOrderDetails?.id || '---'}</strong>
+                </p>
+                
+                <div style={{textAlign:'left', background:'#f8f9fa', padding:'20px', borderRadius:'12px', marginBottom:'20px'}}>
+                  <div style={{fontWeight:'bold', borderBottom:'1px solid #eee', paddingBottom:'10px', marginBottom:'10px', display:'flex', justifyContent:'space-between'}}>
+                    <span>點餐明細</span>
+                    <span style={{color:'var(--primary-color)'}}>{lastOrderDetails?.orderType}</span>
+                  </div>
+                  <div style={{maxHeight:'200px', overflowY:'auto', marginBottom:'10px'}}>
+                    {lastOrderDetails && lastOrderDetails.items.map((item, id) => (
+                      <div key={id} style={{display:'flex', justifyContent:'space-between', fontSize:'15px', marginBottom:'8px'}}>
+                        <span>{item.quantity}x {item.title || item.name}</span>
+                        <span>${item.price * item.quantity}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{borderTop:'2px solid #ddd', paddingTop:'10px', marginTop:'10px'}}>
+                    <div style={{display:'flex', justifyContent:'space-between', marginBottom:'5px'}}>
+                      <span>應付總額:</span>
+                      <span style={{fontWeight:'bold'}}>${lastOrderDetails?.totalAmount}</span>
+                    </div>
+                    <div style={{display:'flex', justifyContent:'space-between', marginBottom:'5px'}}>
+                      <span>支付方式:</span>
+                      <span>{lastOrderDetails?.paymentMethod}</span>
+                    </div>
+                    {lastOrderDetails?.paymentMethod === '現金' && (
+                      <>
+                        <div style={{display:'flex', justifyContent:'space-between', marginBottom:'5px'}}>
+                          <span>實收金額:</span>
+                          <span>${lastOrderDetails?.amountPaid}</span>
+                        </div>
+                        <div style={{display:'flex', justifyContent:'space-between', color:'var(--primary-color)', fontWeight:'bold', fontSize:'20px', marginTop:'10px'}}>
+                          <span>應找零:</span>
+                          <span>${lastOrderDetails?.change}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <button className="btn btn-confirm" style={{width:'100%', height:'70px', fontSize:'24px', borderRadius:'35px', boxShadow:'0 10px 20px rgba(247, 92, 3, 0.2)'}} onClick={() => setShowSuccessModal(false)}>
+                  完成 (點擊關閉)
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        </React.Fragment>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<POSApp />);
+  </script>
+</body>
+</html>

@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>iPOS 總公司管理後台</title>
+  <link rel="stylesheet" href="index.css">
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    :root {
+      --primary-color: #f75c03;
+      --bg-dark: #1a1a1a;
+      --card-bg: #ffffff;
+    }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', "Microsoft JhengHei", sans-serif;
+      background: #f0f2f5;
+      color: #333;
+    }
+    .admin-container {
+      display: flex;
+      height: 100vh;
+    }
+    .sidebar {
+      width: 260px;
+      background: var(--bg-dark);
+      color: white;
+      padding: 30px 20px;
+      display: flex;
+      flex-direction: column;
+    }
+    .main-content {
+      flex: 1;
+      padding: 40px;
+      overflow-y: auto;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+    }
+    .merchant-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 25px;
+    }
+    .merchant-card {
+      background: white;
+      border-radius: 15px;
+      padding: 25px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+      border-top: 5px solid var(--primary-color);
+      transition: transform 0.2s;
+    }
+    .merchant-card:hover {
+      transform: translateY(-5px);
+    }
+    .merchant-card h3 {
+      margin-top: 0;
+      color: var(--primary-color);
+    }
+    .btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: var(--primary-color);
+      color: white;
+    }
+    .btn-outline {
+      border: 1px solid var(--primary-color);
+      color: var(--primary-color);
+      background: transparent;
+    }
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-box {
+      background: white;
+      padding: 30px;
+      border-radius: 15px;
+      width: 500px;
+      max-width: 90%;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+    .badge {
+      padding: 4px 10px;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .badge-active { background: #e8f8f5; color: #1abc9c; }
+    .badge-pending { background: #fef5e7; color: #f39c12; }
+    .badge-expired { background: #fff5f5; color: #ff4757; }
+    
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; }
+    th { text-align: left; padding: 15px 20px; background: #f8f9fa; color: #777; font-size: 14px; }
+    td { padding: 15px 20px; border-bottom: 1px solid #eee; }
+    
+    .sidebar-item { padding: 15px 20px; border-radius: 10px; cursor: pointer; margin-bottom: 5px; transition: all 0.2s; display: flex; align-items: center; gap: 10px; }
+    .sidebar-item:hover { background: rgba(255,255,255,0.05); }
+    .sidebar-item.active { background: var(--primary-color); color: white; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const firebaseConfig = { apiKey: "AIzaSyDTsrdVcwm7mi2aGoexNG4QqcEyn6JFqpw", authDomain: "project-a60e1765-a61e-40db-82e.firebaseapp.com", projectId: "project-a60e1765-a61e-40db-82e" };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    function Dashboard() {
+      const [merchants, setMerchants] = useState([]);
+      const [activeTab, setActiveTab] = useState('merchants'); // merchants, subscriptions
+      const [showModal, setShowModal] = useState(false);
+      const [newMerchant, setNewMerchant] = useState({ id: '', name: '', plan: 'Pro' });
+      
+      const [editSub, setEditSub] = useState(null); // { mid, name, plan, expiryDate }
+
+      useEffect(() => {
+        const unsub = db.collection('merchants').onSnapshot(snapshot => {
+          setMerchants(snapshot.docs.map(doc => ({ ...doc.data(), mid: doc.id })));
+        });
+        return unsub;
+      }, []);
+
+      const getExpiryStatus = (dateStr) => {
+        if (!dateStr) return { label: '未設定', class: 'badge-pending', days: 0 };
+        const expiry = new Date(dateStr);
+        const now = new Date();
+        const diffTime = expiry - now;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (diffDays < 0) return { label: '已過期', class: 'badge-expired', days: diffDays };
+        if (diffDays <= 7) return { label: '即將到期', class: 'badge-pending', days: diffDays };
+        return { label: '正常', class: 'badge-active', days: diffDays };
+      };
+
+      const handleAddMerchant = async () => {
+        if (!newMerchant.id || !newMerchant.name) {
+          alert('請填寫商店 ID 與名稱');
+          return;
+        }
+        
+        try {
+          const defaultExpiry = new Date();
+          defaultExpiry.setDate(defaultExpiry.getDate() + 30); // 預設 30 天試用
+
+          // 1. 建立商家主資料
+          await db.collection('merchants').doc(newMerchant.id).set({
+            name: newMerchant.name,
+            plan: newMerchant.plan,
+            createdAt: new Date().toISOString(),
+            expiryDate: defaultExpiry.toISOString(),
+            status: 'active'
+          });
+
+          // 2. 初始化商家配置 (Branding)
+          await db.collection(`merchants/${newMerchant.id}/settings`).doc('branding').set({
+            name: newMerchant.name,
+            logo: 'https://cdn-icons-png.flaticon.com/512/6978/6978255.png'
+          });
+
+          // 3. 初始化預設權限
+          await db.collection(`merchants/${newMerchant.id}/settings`).doc('role_permissions').set({
+            perms: {
+              admin: ['kds', 'menu', 'categories', 'dashboard', 'analytics', 'history', 'staff', 'settings'],
+              leader: ['kds', 'dashboard', 'analytics', 'history'],
+              cashier: []
+            }
+          });
+
+          setShowModal(false);
+          setNewMerchant({ id: '', name: '', plan: 'Pro' });
+        } catch (e) {
+          alert('建立失敗: ' + e.message);
+        }
+      };
+
+      const handleUpdateSubscription = async () => {
+        if (!editSub) return;
+        try {
+          await db.collection('merchants').doc(editSub.mid).update({
+            plan: editSub.plan,
+            expiryDate: editSub.expiryDate,
+            status: new Date(editSub.expiryDate) > new Date() ? 'active' : 'suspended'
+          });
+          setEditSub(null);
+        } catch (e) { alert('更新失敗: ' + e.message); }
+      };
+
+      const handleQuickRenew = (merchant, months) => {
+        const currentExpiry = merchant.expiryDate ? new Date(merchant.expiryDate) : new Date();
+        const baseDate = currentExpiry > new Date() ? currentExpiry : new Date();
+        baseDate.setMonth(baseDate.getMonth() + months);
+        
+        setEditSub({ 
+          ...merchant, 
+          expiryDate: baseDate.toISOString().split('T')[0] 
+        });
+      };
+
+      return (
+        <div className="admin-container">
+          <div className="sidebar">
+            <h2 style={{color: 'var(--primary-color)'}}>iPOS HQ</h2>
+            <p style={{fontSize: '14px', opacity: 0.7}}>總公司管理後台</p>
+            <div style={{marginTop: '40px'}}>
+              <div className={`sidebar-item ${activeTab === 'merchants' ? 'active' : ''}`} onClick={() => setActiveTab('merchants')}>🏢 商家管理</div>
+              <div className={`sidebar-item ${activeTab === 'subscriptions' ? 'active' : ''}`} onClick={() => setActiveTab('subscriptions')}>💎 訂閱方案</div>
+              <div className="sidebar-item" style={{opacity: 0.5}}>⚙️ 系統設定</div>
+            </div>
+          </div>
+          
+          <div className="main-content">
+            {activeTab === 'merchants' && (
+              <>
+                <div className="header">
+                  <h1>🏢 商家營運中心</h1>
+                  <button className="btn btn-primary" onClick={() => setShowModal(true)}>+ 建立新商家</button>
+                </div>
+
+                <div className="merchant-grid">
+                  {merchants.map(m => (
+                    <div key={m.mid} className="merchant-card">
+                      <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '15px'}}>
+                        <h3>{m.name}</h3>
+                        <span className={`badge ${getExpiryStatus(m.expiryDate).class}`}>{m.plan}</span>
+                      </div>
+                      <div style={{fontSize: '14px', color: '#666', marginBottom: '20px'}}>
+                        <div>商家 ID: <code>{m.mid}</code></div>
+                        <div>到期日: <strong>{m.expiryDate?.split('T')[0] || '永久'}</strong></div>
+                      </div>
+                      <div style={{display: 'flex', gap: '10px'}}>
+                        <a href={`index_saas.html?mid=${m.mid}`} target="_blank" className="btn btn-outline" style={{flex: 1, textAlign: 'center', textDecoration: 'none'}}>前往前台</a>
+                        <a href={`admin_saas.html?mid=${m.mid}`} target="_blank" className="btn btn-primary" style={{flex: 1, textAlign: 'center', textDecoration: 'none'}}>進入管理</a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {activeTab === 'subscriptions' && (
+              <>
+                <div className="header">
+                  <h1>💎 訂閱方案管理</h1>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>商店名稱 (ID)</th>
+                      <th>目前方案</th>
+                      <th>到期日期</th>
+                      <th>剩餘天數</th>
+                      <th>狀態</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {merchants.map(m => {
+                      const status = getExpiryStatus(m.expiryDate);
+                      return (
+                        <tr key={m.mid}>
+                          <td>
+                            <strong>{m.name}</strong><br/>
+                            <code style={{fontSize: '11px'}}>{m.mid}</code>
+                          </td>
+                          <td>
+                            <span className="badge badge-active" style={{background: '#f1f8ff', color: '#0366d6'}}>{m.plan}</span>
+                          </td>
+                          <td>{m.expiryDate?.split('T')[0] || '---'}</td>
+                          <td>
+                             <span style={{color: status.days < 0 ? '#ff4757' : (status.days <= 7 ? '#f39c12' : '#333'), fontWeight: 'bold'}}>
+                                {status.days} 天
+                             </span>
+                          </td>
+                          <td><span className={`badge ${status.class}`}>{status.label}</span></td>
+                          <td>
+                            <button className="btn btn-outline" style={{padding: '5px 12px', fontSize: '13px'}} onClick={() => setEditSub({...m, expiryDate: m.expiryDate?.split('T')[0]})}>續費/修改</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {showModal && (
+              <div className="modal">
+                <div className="modal-box">
+                  <h2>🚀 建立新商家專區</h2>
+                  <div className="form-group">
+                    <label>商店名稱</label>
+                    <input type="text" placeholder="例如：好吃牛肉麵" value={newMerchant.name} onChange={e => setNewMerchant({...newMerchant, name: e.target.value})} />
+                  </div>
+                  <div className="form-group">
+                    <label>商店唯一 ID (mid)</label>
+                    <input type="text" placeholder="例如：beef_noodles" value={newMerchant.id} onChange={e => setNewMerchant({...newMerchant, id: e.target.value})} />
+                  </div>
+                  <div className="form-group">
+                    <label>訂閱方案</label>
+                    <select style={{width: '100%', padding: '12px', borderRadius: '8px'}} value={newMerchant.plan} onChange={e => setNewMerchant({...newMerchant, plan: e.target.value})}>
+                      <option value="Free">Free (免費版)</option>
+                      <option value="Pro">Pro (專業版)</option>
+                      <option value="Enterprise">Enterprise (企業版)</option>
+                    </select>
+                  </div>
+                  <p style={{fontSize: '13px', color: '#777'}}>* 建立後將自動獲得 30 天專業版試用。同步初始化預設配置。</p>
+                  <div style={{display: 'flex', gap: '15px', marginTop: '30px'}}>
+                    <button className="btn btn-primary" style={{flex: 1}} onClick={handleAddMerchant}>確認建立</button>
+                    <button className="btn" style={{flex: 1, background: '#eee'}} onClick={() => setShowModal(false)}>取消</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {editSub && (
+              <div className="modal">
+                <div className="modal-box">
+                  <h2>💎 修改訂閱資訊: {editSub.name}</h2>
+                  <div className="form-group">
+                    <label>當前方案</label>
+                    <select style={{width: '100%', padding: '12px', borderRadius: '8px'}} value={editSub.plan} onChange={e => setEditSub({...editSub, plan: e.target.value})}>
+                      <option value="Free">Free (免費版)</option>
+                      <option value="Pro">Pro (專業版)</option>
+                      <option value="Enterprise">Enterprise (企業版)</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>到期日期</label>
+                    <input type="date" value={editSub.expiryDate} onChange={e => setEditSub({...editSub, expiryDate: e.target.value})} />
+                  </div>
+                  <div style={{display: 'flex', gap: '10px', marginBottom: '30px'}}>
+                    <button className="btn btn-outline" onClick={() => handleQuickRenew(editSub, 1)}>+ 1 個月</button>
+                    <button className="btn btn-outline" onClick={() => handleQuickRenew(editSub, 6)}>+ 6 個月</button>
+                    <button className="btn btn-outline" onClick={() => handleQuickRenew(editSub, 12)}>+ 12 個月</button>
+                  </div>
+                  <div style={{display: 'flex', gap: '15px'}}>
+                    <button className="btn btn-primary" style={{flex: 1}} onClick={handleUpdateSubscription}>儲存變更</button>
+                    <button className="btn" style={{flex: 1, background: '#eee'}} onClick={() => setEditSub(null)}>取消</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<Dashboard />);
+  </script>
+</body>
+</html>
