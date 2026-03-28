@@ -8,9 +8,30 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-  <script src="public/db.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="merchant_keys.js"></script>
+  <script>
+    window.POSDatabase = (function () {
+      const urlParams = new URLSearchParams(window.location.search);
+      const merchantId = urlParams.get('mid') || 'demo';
+      const baseRef = `merchants/${merchantId}`;
+      const firebaseConfig = { apiKey: "AIzaSyDTsrdVcwm7mi2aGoexNG4QqcEyn6JFqpw", authDomain: "project-a60e1765-a61e-40db-82e.firebaseapp.com", projectId: "project-a60e1765-a61e-40db-82e" };
+      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+      const dbInstance = firebase.firestore();
+
+      return {
+        subscribeToOrders: (callback) => dbInstance.collection(`${baseRef}/orders`).orderBy('createdAt', 'desc').onSnapshot(s => callback(s.docs.map(doc => ({ ...doc.data(), id: doc.id })))),
+        updateOrderStatus: async (id, status) => {
+          const data = { status };
+          if (status === 'completed') data.completedAt = new Date().toISOString();
+          await dbInstance.collection(`${baseRef}/orders`).doc(id).update(data);
+        },
+        getKDSSettings: (callback) => dbInstance.collection(`${baseRef}/settings`).doc('kds_settings').onSnapshot(s => callback(s.exists ? s.data() : { yellow: 5, red: 10 })),
+        getMerchantInfo: (callback) => dbInstance.collection('merchants').doc(merchantId).onSnapshot(s => callback(s.exists ? s.data() : null))
+      };
+    })();
+  </script>
   <style>
     :root {
       --primary-color: #f75c03;
@@ -237,6 +258,33 @@
       const currentType = order.orderType || '內用';
       const getOrderNo = (id) => id.includes('-') ? id.split('-')[1] : id.substring(0, 6);
 
+      if (!isStoreAuthorized) {
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: '#1a1c23', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, color: '#fff', fontFamily: 'sans-serif' }}>
+            <div style={{ background: '#242632', padding: '40px', borderRadius: '20px', width: '90%', maxWidth: '400px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', textAlign: 'center' }}>
+              <div style={{ fontSize: '50px', marginBottom: '20px' }}>👨‍🍳</div>
+              <h2 style={{ marginBottom: '10px', fontSize: '24px' }}>KDS 系統登入</h2>
+              <p style={{ color: '#9ca3af', marginBottom: '30px', fontSize: '15px' }}>請輸入商店 <b>{mid}</b> 的存取金鑰以載入看板。</p>
+              <input
+                type="password"
+                placeholder="請輸入金鑰"
+                value={accessKeyInput}
+                onChange={e => setAccessKeyInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleVerifyKey()}
+                style={{ width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #3f414d', background: '#1a1c23', color: '#fff', fontSize: '18px', textAlign: 'center', marginBottom: '15px', outline: 'none' }}
+              />
+              {authError && <p style={{ color: '#f87171', fontSize: '14px', marginBottom: '15px' }}>{authError}</p>}
+              <button
+                onClick={handleVerifyKey}
+                style={{ width: '100%', padding: '15px', borderRadius: '12px', border: 'none', background: '#f75c03', color: '#fff', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer' }}
+              >
+                解鎖看板
+              </button>
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="order-card" style={{ borderTop: `8px solid ${color}` }}>
           <div className="order-card-header" style={{ background: color, color: color === '#f1c40f' ? '#2f3640' : '#fff' }}>
@@ -264,6 +312,34 @@
     }
 
     function KDSApp() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const mid = urlParams.get('mid') || 'demo';
+      const [isStoreAuthorized, setIsStoreAuthorized] = useState(false);
+      const [accessKeyInput, setAccessKeyInput] = useState('');
+      const [authError, setAuthError] = useState('');
+
+      useEffect(() => {
+        const savedKey = localStorage.getItem(`store_auth_${mid}`);
+        const cloudKey = merchantInfo?.accessKey;
+        const localKey = window.MERCHANT_KEYS?.[mid];
+
+        if ((cloudKey && cloudKey === savedKey) || (localKey && localKey === savedKey)) {
+          setIsStoreAuthorized(true);
+        }
+      }, [mid, merchantInfo]);
+
+      const handleVerifyKey = () => {
+        const cloudKey = merchantInfo?.accessKey;
+        const localKey = window.MERCHANT_KEYS?.[mid];
+
+        if ((cloudKey && cloudKey === accessKeyInput) || (localKey && localKey === accessKeyInput)) {
+          localStorage.setItem(`store_auth_${mid}`, accessKeyInput);
+          setIsStoreAuthorized(true);
+          setAuthError('');
+        } else {
+          setAuthError('金鑰錯誤，請重新輸入。');
+        }
+      };
       const [orders, setOrders] = useState([]);
       const [kdsSettings, setKdsSettings] = useState({ yellow: 5, red: 10 });
       const [branding, setBranding] = useState({ name: '載入中...', logo: '' });

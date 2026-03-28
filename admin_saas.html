@@ -12,6 +12,7 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="merchant_keys.js"></script>
   <script>
     window.POSDatabase = (function () {
       const urlParams = new URLSearchParams(window.location.search);
@@ -618,6 +619,34 @@
     }
 
     function AdminApp() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const mid = urlParams.get('mid') || 'demo';
+      const [isStoreAuthorized, setIsStoreAuthorized] = useState(false);
+      const [accessKeyInput, setAccessKeyInput] = useState('');
+      const [authError, setAuthError] = useState('');
+
+      useEffect(() => {
+        const savedKey = localStorage.getItem(`store_auth_${mid}`);
+        const cloudKey = merchantInfo?.accessKey;
+        const localKey = window.MERCHANT_KEYS?.[mid];
+
+        if ((cloudKey && cloudKey === savedKey) || (localKey && localKey === savedKey)) {
+          setIsStoreAuthorized(true);
+        }
+      }, [mid, merchantInfo]);
+
+      const handleVerifyKey = () => {
+        const cloudKey = merchantInfo?.accessKey;
+        const localKey = window.MERCHANT_KEYS?.[mid];
+
+        if ((cloudKey && cloudKey === accessKeyInput) || (localKey && localKey === accessKeyInput)) {
+          localStorage.setItem(`store_auth_${mid}`, accessKeyInput);
+          setIsStoreAuthorized(true);
+          setAuthError('');
+        } else {
+          setAuthError('金鑰錯誤，請重新輸入或聯絡總部。');
+        }
+      };
       const categoryLabelMap = { burger: '漢堡', snack: '點心', drink: '飲料', combo: '套餐' };
 
       const [activeTab, setActiveTab] = useState('kds');
@@ -1005,6 +1034,36 @@
       }
 
       if (isExpired) return <SubscriptionExpiryOverlay merchantName={merchantInfo?.name || '您的商店'} />;
+
+      if (!isStoreAuthorized) {
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: '#1a1c23', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, color: '#fff', fontFamily: 'sans-serif' }}>
+            <div style={{ background: '#242632', padding: '40px', borderRadius: '20px', width: '90%', maxWidth: '400px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', textAlign: 'center' }}>
+              <div style={{ fontSize: '50px', marginBottom: '20px' }}>🔐</div>
+              <h2 style={{ marginBottom: '10px', fontSize: '24px' }}>商店存取驗證</h2>
+              <p style={{ color: '#9ca3af', marginBottom: '30px', fontSize: '15px' }}>請輸入商店 <b>{mid}</b> 的專屬存取金鑰以繼續。</p>
+              <input
+                type="password"
+                placeholder="請輸入金鑰"
+                value={accessKeyInput}
+                onChange={e => setAccessKeyInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleVerifyKey()}
+                style={{ width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #3f414d', background: '#1a1c23', color: '#fff', fontSize: '18px', textAlign: 'center', marginBottom: '15px', outline: 'none' }}
+              />
+              {authError && <p style={{ color: '#f87171', fontSize: '14px', marginBottom: '15px' }}>{authError}</p>}
+              <button
+                onClick={handleVerifyKey}
+                style={{ width: '100%', padding: '15px', borderRadius: '12px', border: 'none', background: '#f75c03', color: '#fff', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', transition: 'filter 0.2s' }}
+                onMouseOver={e => e.currentTarget.style.filter = 'brightness(1.1)'}
+                onMouseOut={e => e.currentTarget.style.filter = 'none'}
+              >
+                驗證金鑰
+              </button>
+              <p style={{ marginTop: '30px', fontSize: '12px', color: '#4b5563' }}>本系統受 iPOS 安全協定保護</p>
+            </div>
+          </div>
+        );
+      }
 
       return (
         <React.Fragment>

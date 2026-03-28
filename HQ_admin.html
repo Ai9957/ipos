@@ -11,6 +11,7 @@
    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+   <script src="merchant_keys.js"></script>
    <style>
       :root {
          --primary-color: #ea580c;
@@ -722,7 +723,7 @@
          const defaultForm = {
             name: '', mid: '', plan: 'Pro', contactName: '', contactPhone: '',
             industry: '手搖飲料', city: '台中市', district: '西區', address: '',
-            authEmail: '', timeStart: '10:00', timeEnd: '22:00'
+            authEmail: '', timeStart: '10:00', timeEnd: '22:00', accessKey: ''
          };
          const [formData, setFormData] = useState(defaultForm);
 
@@ -854,7 +855,8 @@
                   timeStart: formData.timeStart || '10:00',
                   timeEnd: formData.timeEnd || '22:00',
                   expiryDate: finalExpiry,
-                  status: 'active'
+                  status: 'active',
+                  accessKey: formData.accessKey || ''
                };
 
                if (!isEditing) {
@@ -1033,6 +1035,7 @@
                                        </div>
                                        <div className="merchant-card-body">
                                           <p>商家 ID: <code>{m.mid}</code></p>
+                                          <p>存取金鑰: <strong style={{ color: '#059669', fontFamily: 'monospace' }}>{m.accessKey || '(未設定)'}</strong></p>
                                           <p>到期日: <strong style={{ color: status.isExpiring ? '#d97706' : '#111827' }}>{m.expiryDate?.split('T')[0] || '永久'} {status.isExpiring && '(即將到期)'}</strong></p>
                                        </div>
                                        <div className="merchant-card-actions">
@@ -1191,6 +1194,11 @@
                               <div className="form-group">
                                  <label>聯絡電話</label>
                                  <input type="text" className="form-control" placeholder="09xx-xxx-xxx" value={formData.contactPhone} onChange={e => setFormData({ ...formData, contactPhone: e.target.value })} />
+                              </div>
+                              <div className="form-group">
+                                 <label>存取金鑰 (Access Key)</label>
+                                 <input type="text" className="form-control" placeholder="設定登入密碼" value={formData.accessKey} onChange={e => setFormData({ ...formData, accessKey: e.target.value })} />
+                                 <div className="muted-text" style={{ color: '#059669' }}>* 設定後該店後台登入需輸入此密鑰</div>
                               </div>
 
                               <div className="form-group">
