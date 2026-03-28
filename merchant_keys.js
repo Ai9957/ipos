@@ -7,6 +7,6 @@
  * 3. 注意：金鑰僅用於前端初步隔離，請避免對外公開。
  */
 window.MERCHANT_KEYS = {
-  "demo": "123456",
+  "demo": "demo12345",
   // "store-id": "access-key"
 };
